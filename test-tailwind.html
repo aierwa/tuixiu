@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tailwind CSS 测试</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="max-w-4xl mx-auto p-8">
+    <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">Tailwind CSS 测试</h1>
+    <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+      <h2 class="text-xl font-bold mb-4 text-gray-800">预算概览</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+          <p class="text-sm text-gray-600 mb-1">本月预算</p>
+          <p class="text-2xl font-bold text-gray-800">¥8000.00</p>
+        </div>
+        <div class="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+          <p class="text-sm text-gray-600 mb-1">本月剩余</p>
+          <p class="text-2xl font-bold text-green-600">¥6000.00</p>
+        </div>
+        <div class="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
+          <p class="text-sm text-gray-600 mb-1">本月支出</p>
+          <p class="text-2xl font-bold text-red-600">¥2000.00</p>
+        </div>
+        <div class="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500">
+          <p class="text-sm text-gray-600 mb-1">剩余日均</p>
+          <p class="text-2xl font-bold text-yellow-600">¥200.00</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
