@@ -12,7 +12,6 @@ import './App.css';
 function AppContent() {
   const [activeTab, setActiveTab] = useState('overview');
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const { state } = useBudget();
 
   const renderContent = () => {
     switch (activeTab) {

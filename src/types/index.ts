@@ -47,7 +47,7 @@ export interface AppState {
 
 // 动作类型
 export type Action =
-  | { type: 'SET_BUDGET'; payload: number }
+  | { type: 'SET_BUDGET'; payload: { monthlyAmount: number; lastMonthBalance: number } }
   | { type: 'ADD_EXPENSE'; payload: Omit<Expense, 'id'> }
   | { type: 'DELETE_EXPENSE'; payload: string }
   | { type: 'CLEAR_EXPENSES' }

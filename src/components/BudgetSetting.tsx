@@ -52,7 +52,7 @@ const BudgetSetting: React.FC = () => {
         }
 
         // 更新本地状态
-        dispatch({ type: 'SET_BUDGET', payload: amount });
+        dispatch({ type: 'SET_BUDGET', payload: { monthlyAmount: amount, lastMonthBalance: state.budget.lastMonthBalance } });
         setIsEditing(false);
       } catch (error) {
         console.error('设置预算失败:', error);

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
-import { startOfMonth, endOfMonth, format, parseISO } from 'date-fns';
-import { supabase } from '../lib/supabase';
+import { startOfMonth, endOfMonth, format } from 'date-fns';
+
 
 const ExpenseList: React.FC = () => {
-  const { state, dispatch } = useBudget();
+  const { state } = useBudget();
   
   // 设置默认日期范围为当月
   const today = new Date();
@@ -37,38 +37,6 @@ const ExpenseList: React.FC = () => {
 
   // 计算总支出
   const totalExpense = Object.values(expensesByTag).reduce((sum, amount) => sum + amount, 0);
-
-  const handleDelete = async (id: string) => {
-    if (window.confirm('确定要删除这条支出记录吗？')) {
-      try {
-        console.log('删除支出记录:', { id, ledgerId: state.ledger?.id, hasLedger: !!state.ledger });
-        
-        if (!state.ledger || !state.ledger.id) {
-          console.error('账本信息不存在');
-          alert('账本信息不存在，无法删除支出记录');
-          return;
-        }
-        
-        // 从Supabase中删除
-        const { error } = await supabase
-          .from('expenses')
-          .delete()
-          .eq('id', id)
-          .eq('ledger_id', state.ledger.id);
-
-        if (error) {
-          console.error('Supabase删除错误:', error);
-          throw error;
-        }
-
-        // 从本地状态中删除
-        dispatch({ type: 'DELETE_EXPENSE', payload: id });
-      } catch (error) {
-        console.error('删除支出失败:', error);
-        alert('删除支出失败，请重试');
-      }
-    }
-  };
 
   return (
     <div className="bg-white rounded-xl shadow-md p-6 transition-all duration-300 hover:shadow-lg">

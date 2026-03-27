@@ -37,7 +37,7 @@ const budgetReducer = (state: AppState, action: Action): AppState => {
       };
     
     case 'ADD_EXPENSE':
-      const newExpense: Expense = action.payload;
+      const newExpense: Expense = action.payload as Expense;
       const updatedExpenses = [...state.expenses, newExpense];
       const newSpent = calculateMonthlySpent(updatedExpenses);
       return {
@@ -64,7 +64,7 @@ const budgetReducer = (state: AppState, action: Action): AppState => {
       };
     
     case 'ADD_TAG':
-      const newTag: Tag = action.payload;
+      const newTag: Tag = action.payload as Tag;
       return {
         ...state,
         tags: [...state.tags, newTag]
