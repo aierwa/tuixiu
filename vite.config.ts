@@ -6,5 +6,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     allowedHosts: ['discourageable-gilberte-impeccably.ngrok-free.dev']
-  }
+  },
+  base: '/tuixiu/'
 })
