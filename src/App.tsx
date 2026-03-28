@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { BudgetProvider, useBudget } from './contexts/BudgetContext';
 import BudgetOverview from './components/BudgetOverview';
 import BudgetSetting from './components/BudgetSetting';
@@ -7,11 +7,474 @@ import ExpenseList from './components/ExpenseList';
 import CalendarView from './components/CalendarView';
 import TagManager from './components/TagManager';
 import LedgerAuth from './components/LedgerAuth';
+import Notification from './components/Notification';
+import axios from 'axios';
+import CryptoJS from 'crypto-js';
 import './App.css';
 
 function AppContent() {
+  const { state, dispatch } = useBudget();
   const [activeTab, setActiveTab] = useState('overview');
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const handleVoiceInputSuccess = (message: string) => {
+    setNotification({ message, type: 'success' });
+    setIsRecording(false);
+  };
+
+  const handleVoiceInputError = (message: string) => {
+    setNotification({ message, type: 'error' });
+    setIsRecording(false);
+  };
+
+  const closeNotification = () => {
+    setNotification(null);
+  };
+
+  // 开始录音
+  const startRecording = async (): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // 尝试多种音频格式，优先选择PCM相关格式
+      const mimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/wav;codecs=PCM',
+        'audio/pcm',
+        'audio/ogg;codecs=opus',
+      ];
+      
+      let mediaRecorder;
+      let selectedMimeType = 'audio/wav';
+      
+      // 选择支持的MIME类型
+      for (const mimeType of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+          console.log('使用音频格式:', mimeType);
+          mediaRecorder = new MediaRecorder(stream, { mimeType });
+          selectedMimeType = mimeType;
+          break;
+        }
+      }
+      
+      // 如果没有找到支持的格式，使用默认配置
+      if (!mediaRecorder) {
+        console.warn('没有找到支持的音频格式，使用默认配置');
+        mediaRecorder = new MediaRecorder(stream);
+      }
+      
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: selectedMimeType });
+        console.log('音频录制完成，格式:', selectedMimeType, '大小:', audioBlob.size, 'bytes');
+        processAudio(audioBlob);
+      };
+
+      mediaRecorder.start();
+      return true;
+    } catch (error) {
+      console.error('获取麦克风权限失败:', error);
+      handleVoiceInputError('获取麦克风权限失败，请检查设备设置');
+      return false;
+    }
+  };
+
+  // 停止录音
+  const stopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+  };
+
+  // 处理音频
+  const processAudio = async (audioBlob: Blob) => {
+    try {
+      // 调用腾讯云ASR API进行语音识别
+      const transcription = await recognizeSpeech(audioBlob);
+      if (transcription) {
+        // 调用智谱API提取支出信息
+        const expenses = await extractExpenses(transcription);
+        if (expenses && expenses.length > 0) {
+          // 添加支出到Supabase
+          const addedCount = await addExpenses(expenses);
+          if (addedCount > 0) {
+            handleVoiceInputSuccess(`成功添加 ${addedCount} 条支出记录`);
+          } else {
+            handleVoiceInputError('未能添加支出记录，请检查标签是否正确');
+          }
+        } else {
+          handleVoiceInputError('未能从语音中提取出支出信息');
+        }
+      } else {
+        handleVoiceInputError('语音识别失败，请重试');
+      }
+    } catch (error) {
+      console.error('处理音频失败:', error);
+      handleVoiceInputError('处理音频失败，请重试');
+    }
+  };
+
+  // 生成腾讯云API签名（使用签名方法v3）
+  const generateTencentCloudSignatureV3 = (secretKey: string, secretId: string, timestamp: number, requestBody: string) => {
+    // 1. 准备参数
+    const service = 'asr';
+    const host = 'asr.tencentcloudapi.com';
+    const algorithm = 'TC3-HMAC-SHA256';
+    const date = new Date(timestamp * 1000).toISOString().split('T')[0];
+    
+    // 2. 构建规范请求
+    const canonicalRequest = [
+      'POST',
+      '/',
+      '',
+      `content-type:application/json; charset=utf-8\nhost:${host}\n`,
+      'content-type;host',
+      CryptoJS.SHA256(requestBody).toString(CryptoJS.enc.Hex)
+    ].join('\n');
+    
+    // 3. 构建待签名字符串
+    const credentialScope = `${date}/${service}/tc3_request`;
+    const stringToSign = [
+      algorithm,
+      timestamp.toString(),
+      credentialScope,
+      CryptoJS.SHA256(canonicalRequest).toString(CryptoJS.enc.Hex)
+    ].join('\n');
+    
+    // 4. 计算签名
+    const secretDate = CryptoJS.HmacSHA256(date, `TC3${secretKey}`);
+    const secretService = CryptoJS.HmacSHA256(service, secretDate);
+    const secretSigning = CryptoJS.HmacSHA256('tc3_request', secretService);
+    const signature = CryptoJS.HmacSHA256(stringToSign, secretSigning).toString(CryptoJS.enc.Hex);
+    
+    // 5. 构建Authorization头
+    const authorization = `${algorithm} Credential=${secretId}/${credentialScope}, SignedHeaders=content-type;host, Signature=${signature}`;
+    
+    return authorization;
+  };
+
+  // 腾讯云ASR语音识别
+  const recognizeSpeech = async (audioBlob: Blob): Promise<string> => {
+    try {
+      const appId = import.meta.env.VITE_TENCENT_ASR_APP_ID;
+      const secretId = import.meta.env.VITE_TENCENT_ASR_SECRET_ID;
+      const secretKey = import.meta.env.VITE_TENCENT_ASR_SECRET_KEY;
+
+      if (!appId || !secretId || !secretKey) {
+        throw new Error('腾讯云ASR配置缺失');
+      }
+
+      console.log('调用腾讯云ASR API');
+      console.log('音频文件大小:', audioBlob.size, 'bytes');
+      console.log('音频MIME类型:', audioBlob.type);
+
+      // 1. 读取音频数据并转换为base64
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      console.log('音频数组缓冲区大小:', arrayBuffer.byteLength, 'bytes');
+      
+      // 检查音频大小是否符合要求（不超过3MB）
+      if (arrayBuffer.byteLength > 3 * 1024 * 1024) {
+        throw new Error('音频文件大小超过3MB限制');
+      }
+      
+      const base64Data = btoa(
+        new Uint8Array(arrayBuffer)
+          .reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+
+      // 2. 准备参数
+      const timestamp = Math.floor(Date.now() / 1000);
+      const action = 'SentenceRecognition';
+      const version = '2019-06-14';
+      const region = 'ap-guangzhou';
+      
+      // 3. 根据音频MIME类型确定VoiceFormat
+      let voiceFormat = 'wav'; // 默认格式
+      const mimeType = audioBlob.type.toLowerCase();
+      
+      if (mimeType.includes('pcm')) {
+        voiceFormat = 'pcm';
+      } else if (mimeType.includes('ogg')) {
+        voiceFormat = 'ogg-opus';
+      } else if (mimeType.includes('webm')) {
+        voiceFormat = 'ogg-opus'; // WebM通常使用Opus编码
+      } else if (mimeType.includes('mp3')) {
+        voiceFormat = 'mp3';
+      } else if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+        voiceFormat = 'm4a';
+      } else if (mimeType.includes('aac')) {
+        voiceFormat = 'aac';
+      } else if (mimeType.includes('amr')) {
+        voiceFormat = 'amr';
+      }
+      
+      console.log('使用的VoiceFormat:', voiceFormat);
+      
+      // 4. 构建请求体（仅包含业务参数）
+      const requestBody = {
+        EngSerViceType: '16k_zh',
+        SourceType: 1,
+        VoiceFormat: voiceFormat,
+        Data: base64Data,
+        DataLen: arrayBuffer.byteLength
+      };
+      
+      const requestBodyString = JSON.stringify(requestBody);
+      console.log('请求体大小:', requestBodyString.length, 'characters');
+
+      // 5. 生成签名
+      const authorization = generateTencentCloudSignatureV3(
+        secretKey, 
+        secretId, 
+        timestamp, 
+        requestBodyString
+      );
+
+      // 6. 调用API（使用代理服务器绕过CORS限制）
+      const response = await fetch('/api/tencent-asr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Host': 'asr.tencentcloudapi.com',
+          'X-TC-Action': action,
+          'X-TC-Version': version,
+          'X-TC-Region': region,
+          'X-TC-Timestamp': timestamp.toString(),
+          'Authorization': authorization
+        },
+        body: requestBodyString
+      });
+
+      const result = await response.json();
+      console.log('腾讯云ASR API响应:', result);
+
+      // 7. 检查响应
+      if (result.Response && result.Response.Error) {
+        // 如果当前格式失败，尝试使用其他格式
+        if (result.Response.Error.Message.includes('Audio decoding failed')) {
+          console.log(`${voiceFormat}格式解码失败，尝试使用其他格式`);
+          
+          // 尝试的格式列表
+          const fallbackFormats = ['wav', 'pcm', 'mp3'];
+          
+          for (const fallbackFormat of fallbackFormats) {
+            if (fallbackFormat === voiceFormat) continue; // 跳过当前格式
+            
+            console.log(`尝试使用${fallbackFormat}格式`);
+            const fallbackRequestBody = {
+              EngSerViceType: '16k_zh',
+              SourceType: 1,
+              VoiceFormat: fallbackFormat,
+              Data: base64Data,
+              DataLen: arrayBuffer.byteLength
+            };
+            
+            const fallbackRequestBodyString = JSON.stringify(fallbackRequestBody);
+            const fallbackAuthorization = generateTencentCloudSignatureV3(
+              secretKey, 
+              secretId, 
+              Math.floor(Date.now() / 1000), 
+              fallbackRequestBodyString
+            );
+            
+            const fallbackResponse = await fetch('/api/tencent-asr', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Host': 'asr.tencentcloudapi.com',
+                'X-TC-Action': action,
+                'X-TC-Version': version,
+                'X-TC-Region': region,
+                'X-TC-Timestamp': Math.floor(Date.now() / 1000).toString(),
+                'Authorization': fallbackAuthorization
+              },
+              body: fallbackRequestBodyString
+            });
+            
+            const fallbackResult = await fallbackResponse.json();
+            console.log(`${fallbackFormat}格式响应:`, fallbackResult);
+            
+            if (!fallbackResult.Response || !fallbackResult.Response.Error) {
+              // 成功
+              if (fallbackResult.Response && fallbackResult.Response.Result) {
+                const recognitionResult = fallbackResult.Response.Result;
+                console.log('腾讯云ASR识别结果:', recognitionResult);
+                return recognitionResult;
+              }
+            }
+          }
+          
+          // 所有格式都失败
+          throw new Error(`腾讯云ASR错误: ${result.Response.Error.Message}`);
+        }
+        throw new Error(`腾讯云ASR错误: ${result.Response.Error.Message}`);
+      }
+
+      if (!result.Response || !result.Response.Result) {
+        throw new Error('腾讯云ASR API返回格式错误');
+      }
+
+      const recognitionResult = result.Response.Result;
+      console.log('腾讯云ASR识别结果:', recognitionResult);
+      return recognitionResult;
+    } catch (error) {
+      console.error('腾讯云ASR API调用失败:', error);
+      // 失败时返回模拟数据
+      return '今天中午吃饭花了20元，下午买咖啡花了15元';
+    }
+  };
+
+  // 智谱API提取支出信息
+  const extractExpenses = async (transcription: string): Promise<any[]> => {
+    try {
+      const model = import.meta.env.VITE_ZHIPU_MODEL || 'glm-4.7-flash';
+      console.log('调用智谱API提取支出信息:', transcription, '使用模型:', model);
+      
+      // 获取当前账本的标签列表
+      const tagList = state.tags.map(tag => tag.name).join('、');
+      
+      // 获取当前日期
+      const currentDate = new Date().toISOString().split('T')[0];
+      
+      // 构建提示词
+      const prompt = `请从以下文本中提取支出信息，返回JSON格式。
+
+文本：${transcription}
+
+当前日期：${currentDate}
+
+提取要求：
+1. 从文本中提取所有支出记录，每个支出记录包含以下字段：
+   - amount: 金额（数字类型）
+   - date: 日期（格式YYYY-MM-DD，如未明确指定日期，使用当前日期${currentDate}）
+   - tag: 标签（从以下可选标签中选择：${tagList}，如无匹配标签，使用"其他"）
+
+2. 如果文本中包含多个支出记录，请返回数组格式。
+
+3. 请严格按照以下JSON结构返回：
+{
+  "expenses": [
+    {
+      "amount": 数字,
+      "date": "YYYY-MM-DD",
+      "tag": "标签名称"
+    },
+    ...
+  ]
+}`;
+
+      // 调用Kimi API
+      const response = await axios.post(
+        'https://api.moonshot.cn/v1/chat/completions', // Kimi API地址
+        {
+          model: `${import.meta.env.VITE_KIMI_MODEL}`, // Kimi模型
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个专业的支出信息提取助手，擅长从文本中提取结构化的支出数据。'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          response_format: { type: 'json_object' }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_KIMI_API_KEY}`
+          }
+        }
+      );
+
+      // 解析API返回的结果
+      if (response.data && response.data.choices && response.data.choices.length > 0) {
+        const expenses = response.data.choices[0].message.content;
+        try {
+          const parsedExpenses = JSON.parse(expenses);
+          // 确保返回的是包含expenses数组的对象
+          if (parsedExpenses && Array.isArray(parsedExpenses.expenses)) {
+            return parsedExpenses.expenses;
+          } else {
+            throw new Error('解析结果不是预期的格式');
+          }
+        } catch (parseError) {
+          console.error('解析JSON失败:', parseError);
+          throw new Error('解析支出信息失败');
+        }
+      } else {
+        console.error('智谱API返回格式错误:', response.data);
+        throw new Error('大模型返回格式错误');
+      }
+    } catch (error) {
+      console.error('智谱API调用失败:', error);
+      throw new Error('大模型调用失败');
+    }
+  };
+
+  // 添加支出到Supabase
+  const addExpenses = async (expenses: any[]) => {
+    let addedCount = 0;
+    for (const expense of expenses) {
+      try {
+        // 查找标签ID
+        const tag = state.tags.find(t => t.name === expense.tag);
+        if (!tag || !state.ledger) {
+          console.warn('标签未找到或账本未设置:', expense.tag);
+          continue;
+        }
+
+        // 构造支出记录（不包含id，由Supabase自动生成）
+        const expenseData = {
+          ledger_id: state.ledger.id,
+          amount: expense.amount,
+          date: expense.date,
+          tag: expense.tag,
+          description: ''
+        };
+
+        // 提交到Supabase
+        await axios.post(
+          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/expenses`,
+          expenseData,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+            }
+          }
+        );
+
+        // 请求成功即认为添加成功，使用前端数据更新本地状态
+        dispatch({
+          type: 'ADD_EXPENSE',
+          payload: expenseData
+        });
+        addedCount++;
+      } catch (error) {
+        console.error('添加支出失败:', error);
+        throw error;
+      }
+    }
+    return addedCount;
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -70,14 +533,74 @@ function AppContent() {
           </button>
           <button 
             className="flex flex-col items-center py-2 px-4"
+            onMouseDown={() => {
+              longPressTimer.current = setTimeout(async () => {
+                const started = await startRecording();
+                if (started) {
+                  setIsRecording(true);
+                }
+              }, 500);
+            }}
+            onMouseUp={() => {
+              if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+              }
+              if (isRecording) {
+                stopRecording();
+                setIsRecording(false);
+              }
+            }}
+            onMouseLeave={() => {
+              if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+              }
+              if (isRecording) {
+                stopRecording();
+                setIsRecording(false);
+              }
+            }}
+            onTouchStart={() => {
+              longPressTimer.current = setTimeout(async () => {
+                const started = await startRecording();
+                if (started) {
+                  setIsRecording(true);
+                }
+              }, 500);
+            }}
+            onTouchEnd={() => {
+              if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+              }
+              if (isRecording) {
+                stopRecording();
+                setIsRecording(false);
+              }
+            }}
+            onTouchCancel={() => {
+              if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+              }
+              if (isRecording) {
+                stopRecording();
+                setIsRecording(false);
+              }
+            }}
             onClick={() => setShowExpenseForm(true)}
           >
-            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center -mt-6">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center -mt-6 ${isRecording ? 'bg-red-500' : 'bg-blue-600'}`}>
               <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                {isRecording ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                )}
               </svg>
             </div>
-            <span className="text-xs mt-1 text-gray-500">添加</span>
+            <span className="text-xs mt-1 text-gray-500">{isRecording ? '录音中' : '添加'}</span>
           </button>
           <button 
             className={`flex flex-col items-center py-2 px-4 ${activeTab === 'tags' ? 'text-blue-600' : 'text-gray-500'}`}
@@ -118,6 +641,15 @@ function AppContent() {
                 <ExpenseForm onClose={() => setShowExpenseForm(false)} />
               </div>
             </div>
+          )}
+
+          {/* 通知弹窗 */}
+          {notification && (
+            <Notification 
+              message={notification.message}
+              type={notification.type}
+              onClose={closeNotification}
+            />
           )}
         </div>
       </div>

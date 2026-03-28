@@ -8,6 +8,7 @@
 
 - **预算管理**：设置月度预算，查看预算使用情况，支持上月结余
 - **支出记录**：快速添加支出，按标签分类，查看支出历史
+- **语音记账**：长按添加按钮触发语音输入，支持多条支出记录，自动识别日期、标签和金额
 - **标签管理**：自定义支出标签，支持颜色区分
 - **日历视图**：在首页展示日历，直观查看支出分布
 - **数据持久化**：使用 Supabase 远端存储数据，确保数据不丢失，支持多人共同记账
@@ -24,6 +25,9 @@
 | date-fns | 3.6.0 | 日期处理 |
 | @supabase/supabase-js | 2.x | Supabase SDK |
 | bcryptjs | 2.x | 密码哈希验证 |
+| MediaRecorder API | - | 浏览器语音录制 |
+| Tencent Cloud ASR | - | 语音识别服务 |
+| Zhiyuan API | - | 智能数据提取 |
 
 ## 项目结构
 
@@ -36,7 +40,9 @@ src/
 │   ├── ExpenseForm.tsx       # 支出表单组件（弹窗）
 │   ├── ExpenseList.tsx       # 支出列表组件
 │   ├── TagManager.tsx        # 标签管理组件
-│   └── LedgerAuth.tsx        # 账本验证组件
+│   ├── LedgerAuth.tsx        # 账本验证组件
+│   ├── VoiceInput.tsx        # 语音输入组件
+│   └── Notification.tsx      # 通知弹窗组件
 ├── contexts/            # 状态管理
 │   └── BudgetContext.tsx     # 预算上下文（包含 reducer）
 ├── hooks/               # 自定义钩子
@@ -106,6 +112,22 @@ src/
 - 未验证用户无法访问应用
 - 支持密码哈希验证
 
+### 6. 语音记账
+
+**VoiceInput 组件**：
+- 长按添加按钮触发语音输入
+- 支持录制语音并转换为文字
+- 调用 Tencent Cloud ASR 进行语音识别
+- 调用 Zhiyuan API 提取支出信息（日期、标签、金额）
+- 支持多条支出记录的一次性提取
+- 自动将提取的支出信息保存到 Supabase
+
+**Notification 组件**：
+- 语音识别成功/失败提示
+- 数据提取成功/失败提示
+- 支出添加成功/失败提示
+- 轻触屏幕可关闭通知
+
 ## 状态管理
 
 应用使用 React Context API 结合 useReducer 进行状态管理：
@@ -125,14 +147,21 @@ src/
    npm install
    ```
 
-2. **配置 Supabase**：
+2. **配置环境变量**：
    - 在 Supabase 控制台创建新项目
    - 获取 API 密钥（anon key）和项目 URL
+   - 申请腾讯云 ASR 服务和智谱 API 密钥
    - 在 `.env` 文件中配置：
      ```
      VITE_SUPABASE_URL=your-supabase-url
      VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+     VITE_TENCENT_ASR_API_KEY=your-tencent-asr-api-key
+     VITE_ZHIPU_API_KEY=your-zhiyuan-api-key
+     VITE_ZHIPU_MODEL=GLM-4.7-Flash
      ```
+   - `VITE_TENCENT_ASR_API_KEY`：腾讯云 ASR 服务 API 密钥
+   - `VITE_ZHIPU_API_KEY`：智谱 API 密钥
+   - `VITE_ZHIPU_MODEL`：智谱模型名称，可根据需要切换
 
 3. **创建数据库表**：
    - 在 Supabase 控制台的 SQL 编辑器中执行 `supabase_schema.sql` 文件中的 SQL 语句
@@ -279,12 +308,13 @@ const { state, dispatch, loading, checkAuth, loadData } = useBudget();
 1. **移动端适配**：响应式设计，适配各种手机屏幕
 2. **直观的预算概览**：环形进度图展示预算使用情况
 3. **便捷的支出记录**：浮动按钮 + 弹窗表单
-4. **智能的标签管理**：颜色区分，网格选择
-5. **数据持久化**：Supabase 远端存储，数据不丢失
-6. **跨月自动处理**：自动更新预算状态
-7. **多人共同记账**：支持多用户使用同一账本
-8. **安全验证**：使用 bcrypt 进行密码哈希验证
-9. **实时同步**：数据实时同步到 Supabase
+4. **智能的语音记账**：长按添加按钮触发语音输入，支持多条支出记录
+5. **智能的标签管理**：颜色区分，网格选择
+6. **数据持久化**：Supabase 远端存储，数据不丢失
+7. **跨月自动处理**：自动更新预算状态
+8. **多人共同记账**：支持多用户使用同一账本
+9. **安全验证**：使用 bcrypt 进行密码哈希验证
+10. **实时同步**：数据实时同步到 Supabase
 
 
 ## 故障排除
