@@ -10,6 +10,7 @@ import LedgerAuth from './components/LedgerAuth';
 import Notification from './components/Notification';
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
+import { supabase } from './lib/supabase';
 import './App.css';
 
 function AppContent() {
@@ -18,6 +19,7 @@ function AppContent() {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -25,20 +27,32 @@ function AppContent() {
   const handleVoiceInputSuccess = (message: string) => {
     setNotification({ message, type: 'success' });
     setIsRecording(false);
+    setIsProcessing(false);
   };
 
   const handleVoiceInputError = (message: string) => {
     setNotification({ message, type: 'error' });
     setIsRecording(false);
+    setIsProcessing(false);
   };
 
   const closeNotification = () => {
     setNotification(null);
   };
 
+  // 触发设备震动
+  const triggerVibration = () => {
+    if (navigator.vibrate) {
+      navigator.vibrate(200); // 震动200毫秒
+    }
+  };
+
   // 开始录音
   const startRecording = async (): Promise<boolean> => {
     try {
+      // 触发震动
+      triggerVibration();
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
       // 尝试多种音频格式，优先选择PCM相关格式
@@ -103,6 +117,7 @@ function AppContent() {
   // 处理音频
   const processAudio = async (audioBlob: Blob) => {
     try {
+      setIsProcessing(true);
       // 调用腾讯云ASR API进行语音识别
       const transcription = await recognizeSpeech(audioBlob);
       if (transcription) {
@@ -110,9 +125,16 @@ function AppContent() {
         const expenses = await extractExpenses(transcription);
         if (expenses && expenses.length > 0) {
           // 添加支出到Supabase
-          const addedCount = await addExpenses(expenses);
-          if (addedCount > 0) {
-            handleVoiceInputSuccess(`成功添加 ${addedCount} 条支出记录`);
+          const result = await addExpenses(expenses);
+          if (result.count > 0) {
+            // 生成详细的成功消息
+            let message = `成功添加 ${result.count} 条支出：\n`;
+            result.expenses.forEach((expense: any) => {
+              // 格式化日期为 MM-DD 格式
+              const formattedDate = expense.date.substring(5); // 提取 YYYY-MM-DD 中的 MM-DD 部分
+              message += `${formattedDate}，${expense.tag}，${expense.amount}\n`;
+            });
+            handleVoiceInputSuccess(message);
           } else {
             handleVoiceInputError('未能添加支出记录，请检查标签是否正确');
           }
@@ -431,6 +453,7 @@ function AppContent() {
   // 添加支出到Supabase
   const addExpenses = async (expenses: any[]) => {
     let addedCount = 0;
+    const addedExpenses: any[] = [];
     for (const expense of expenses) {
       try {
         // 查找标签ID
@@ -440,40 +463,36 @@ function AppContent() {
           continue;
         }
 
-        // 构造支出记录（不包含id，由Supabase自动生成）
-        const expenseData = {
-          ledger_id: state.ledger.id,
-          amount: expense.amount,
-          date: expense.date,
-          tag: expense.tag,
-          description: ''
-        };
-
         // 提交到Supabase
-        await axios.post(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/expenses`,
-          expenseData,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-            }
-          }
-        );
+        const { data, error } = await supabase
+          .from('expenses')
+          .insert({
+            ledger_id: state.ledger.id,
+            amount: expense.amount,
+            date: expense.date,
+            tag: expense.tag,
+            description: ''
+          })
+          .select()
+          .single();
 
-        // 请求成功即认为添加成功，使用前端数据更新本地状态
+        if (error) {
+          throw error;
+        }
+
+        // 提交支出记录到本地状态
         dispatch({
           type: 'ADD_EXPENSE',
-          payload: expenseData
+          payload: data
         });
         addedCount++;
+        addedExpenses.push(data);
       } catch (error) {
         console.error('添加支出失败:', error);
         throw error;
       }
     }
-    return addedCount;
+    return { count: addedCount, expenses: addedExpenses };
   };
 
   const renderContent = () => {
@@ -639,6 +658,38 @@ function AppContent() {
                   </button>
                 </div>
                 <ExpenseForm onClose={() => setShowExpenseForm(false)} />
+              </div>
+            </div>
+          )}
+
+          {/* 语音输入动画 */}
+          {(isRecording || isProcessing) && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40">
+              <div className="bg-white rounded-2xl p-8 w-11/12 max-w-md flex flex-col items-center">
+                {isRecording ? (
+                  <div className="flex flex-col items-center">
+                    <div className="relative mb-4">
+                      <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center">
+                          <div className="w-4 h-4 rounded-full bg-white animate-pulse"></div>
+                        </div>
+                      </div>
+                      <div className="absolute inset-0 rounded-full border-4 border-red-400 animate-ping"></div>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">正在倾听</h3>
+                    <p className="text-gray-600 text-center">请说出您的支出信息</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center mb-4">
+                      <svg className="w-10 h-10 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">正在记账</h3>
+                    <p className="text-gray-600 text-center">正在处理您的语音输入</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
