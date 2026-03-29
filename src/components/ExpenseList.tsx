@@ -75,27 +75,35 @@ const ExpenseList: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {/* 总支出 */}
-          <div className="p-4 bg-gray-50 rounded-lg">
+          <div className="p-3 bg-gray-50 rounded-lg">
             <div className="flex justify-between items-center">
               <span className="text-lg font-medium text-gray-800">总支出</span>
-              <span className="text-2xl font-bold text-gray-800">¥{Math.round(totalExpense)}</span>
+              <span className="text-2xl font-bold text-gray-800"><span className="font-normal text-lg">¥</span>{Math.round(totalExpense)}</span>
             </div>
           </div>
           
           {/* 按标签分组的支出 */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             {sortedTagExpenses.map(({ tag, amount }) => {
               // 查找标签对应的颜色
               const tagInfo = state.tags.find(t => t.name === tag);
               const tagColor = tagInfo?.color || '#E5E7EB';
+              // 计算百分比
+              const percentage = totalExpense > 0 ? (amount / totalExpense) * 100 : 0;
               
               return (
-                <div key={tag} className="flex items-center justify-between p-4 rounded-lg transition-all duration-300" style={{ backgroundColor: tagColor }}>
-                  <div className="font-medium text-gray-800">{tag}</div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-gray-800">¥{Math.round(amount)}</span>
+                <div 
+                  key={tag} 
+                  className="flex items-center justify-between p-3 rounded-lg transition-all duration-300 relative overflow-hidden"
+                  style={{ 
+                    background: `linear-gradient(to right, ${tagColor} ${percentage}%, #F3F4F6 ${percentage}%)`
+                  }}
+                >
+                  <div className="font-medium text-gray-800 relative z-10">{tag}</div>
+                  <div className="flex items-center gap-3 relative z-10">
+                    <span className="font-bold text-gray-800"><span className="font-normal text-sm">¥</span>{Math.round(amount)}</span>
                     <span className="text-sm text-gray-600">
-                      ({Math.round((amount / totalExpense) * 100)}%)
+                      ({Math.round(percentage)}%)
                     </span>
                   </div>
                 </div>

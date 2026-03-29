@@ -13,7 +13,7 @@ const BudgetOverview: React.FC = () => {
 
   // 计算预算使用百分比
   const totalBudget = budget.monthlyAmount + budget.lastMonthBalance;
-  const usagePercentage = totalBudget > 0 ? (budget.spent / totalBudget) * 100 : 0;
+  const usagePercentage = budget.remaining < 0 ? 100 : (totalBudget > 0 ? (budget.spent / totalBudget) * 100 : 0);
   
   // 动画状态
   const [animatedPercentage, setAnimatedPercentage] = useState(0);
@@ -52,18 +52,47 @@ const BudgetOverview: React.FC = () => {
     // 数字动画
     const valueInterval = setInterval(() => {
       setAnimatedValues(prev => {
+        // 计算新值，使用固定步长并根据目标值调整方向
+        const calculateNewValue = (current: number, target: number) => {
+          // 计算当前值与目标值的差值
+          const diff = target - current;
+          // 计算步长，确保动画平滑
+          const step = diff / 20;
+          // 计算新值
+          const newValue = current + step;
+          
+          // 根据目标值的正负，确保新值不会超过目标范围
+          if (target >= 0) {
+            return Math.min(newValue, target);
+          } else {
+            return Math.max(newValue, target);
+          }
+        };
+        
         const newValues = {
-          remaining: Math.min(prev.remaining + budget.remaining / 40, budget.remaining),
-          spent: Math.min(prev.spent + budget.spent / 40, budget.spent),
-          dailyRemaining: Math.min(prev.dailyRemaining + dailyRemaining / 40, dailyRemaining)
+          remaining: calculateNewValue(prev.remaining, budget.remaining),
+          spent: calculateNewValue(prev.spent, budget.spent),
+          dailyRemaining: calculateNewValue(prev.dailyRemaining, dailyRemaining)
+        };
+        
+        // 检查动画是否完成，考虑目标值的正负
+        const isValueReached = (current: number, target: number) => {
+          // 当差值的绝对值小于0.1时，认为已达到目标值
+          return Math.abs(current - target) < 0.1;
         };
         
         if (
-          newValues.remaining >= budget.remaining &&
-          newValues.spent >= budget.spent &&
-          newValues.dailyRemaining >= dailyRemaining
+          isValueReached(newValues.remaining, budget.remaining) &&
+          isValueReached(newValues.spent, budget.spent) &&
+          isValueReached(newValues.dailyRemaining, dailyRemaining)
         ) {
+          // 直接设置为目标值，避免精度问题
           clearInterval(valueInterval);
+          return {
+            remaining: budget.remaining,
+            spent: budget.spent,
+            dailyRemaining: dailyRemaining
+          };
         }
         
         return newValues;
@@ -78,18 +107,21 @@ const BudgetOverview: React.FC = () => {
 
   // 根据使用百分比获取颜色
   const getStatusColor = () => {
+    if (budget.remaining < 0) return '#ef4444'; // red-500
     if (usagePercentage > 80) return '#ef4444'; // red-500
     if (usagePercentage > 50) return '#f59e0b'; // amber-500
     return '#10b981'; // emerald-500
   };
 
   const getStatusBgColor = () => {
+    if (budget.remaining < 0) return 'bg-red-50';
     if (usagePercentage > 80) return 'bg-red-50';
     if (usagePercentage > 50) return 'bg-amber-50';
     return 'bg-emerald-50';
   };
 
   const getStatusTextColor = () => {
+    if (budget.remaining < 0) return 'text-red-600';
     if (usagePercentage > 80) return 'text-red-600';
     if (usagePercentage > 50) return 'text-amber-600';
     return 'text-emerald-600';
@@ -122,11 +154,13 @@ const BudgetOverview: React.FC = () => {
             {/* 状态提示 */}
             <div className={`px-3 py-1 rounded-full ${getStatusBgColor()}`}>
               <span className={`text-xs font-medium ${getStatusTextColor()}`}>
-                {usagePercentage > 80 
-                  ? <span><span className="text-lg">🍜</span> 预算紧张</span> 
-                  : usagePercentage > 50 
-                    ? <span><span className="text-lg">🍖</span> 预算过半</span> 
-                    : <span><span className="text-lg">🍲</span> 预算充足</span>}
+                {budget.remaining < 0 
+                  ? <span><span className="text-lg">💥</span> 已超支</span> 
+                  : usagePercentage > 80 
+                    ? <span><span className="text-lg">🍜</span> 预算紧张</span> 
+                    : usagePercentage > 50 
+                      ? <span><span className="text-lg">🍖</span> 预算过半</span> 
+                      : <span><span className="text-lg">🍲</span> 预算充足</span>}
               </span>
             </div>
           </div>
@@ -183,7 +217,7 @@ const BudgetOverview: React.FC = () => {
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-sm text-slate-400 mb-1">剩余预算</span>
               <span className={`text-3xl font-bold ${getStatusTextColor()} tracking-wide`}>
-                <span className="text-xl">¥</span>{Math.round(animatedValues.remaining)}
+                <span className="font-normal text-lg">¥</span>{Math.round(animatedValues.remaining)}
               </span>
               <span className="text-xs text-slate-400 mt-1">
                 已用 {animatedPercentage.toFixed(0)}%

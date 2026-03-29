@@ -19,9 +19,15 @@ export const getDaysRemainingInMonth = (): number => {
 
 // 检查日期是否在当月
 export const isDateInCurrentMonth = (dateString: string): boolean => {
-  const date = parseISO(dateString);
-  const today = new Date();
-  return isSameMonth(date, today);
+  if (!dateString) return false;
+  try {
+    const date = parseISO(dateString);
+    if (isNaN(date.getTime())) return false;
+    const today = new Date();
+    return isSameMonth(date, today);
+  } catch {
+    return false;
+  }
 };
 
 // 获取月份的开始日期
