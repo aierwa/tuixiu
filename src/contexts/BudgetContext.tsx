@@ -230,7 +230,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         lastMonth.setMonth(lastMonth.getMonth() - 1);
         const lastMonthStr = lastMonth.toISOString().slice(0, 7); // 格式：YYYY-MM
         
-        const { data: lastMonthBudgets, error: lastMonthError } = await supabase
+        const { data: lastMonthBudgets } = await supabase
           .from('budgets')
           .select('remaining')
           .eq('ledger_id', ledgerId)

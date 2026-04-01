@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import { getCurrentDate } from '../utils/dateUtils';
 import { supabase } from '../lib/supabase';
+import { getTopFrequencyRecords, addFrequencyRecord, FrequencyRecord } from '../utils/frequencyUtils';
 
 interface ExpenseFormProps {
   onClose: () => void;
@@ -13,6 +14,13 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
   const [date, setDate] = useState(getCurrentDate());
   const [tag, setTag] = useState(state.tags[0]?.id || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [frequencyRecords, setFrequencyRecords] = useState<FrequencyRecord[]>([]);
+
+  // 加载高频记录
+  useEffect(() => {
+    const records = getTopFrequencyRecords();
+    setFrequencyRecords(records);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +56,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
         payload: data
       });
 
+      // 添加高频记录
+      const selectedTag = state.tags.find(t => t.id === tag);
+      if (selectedTag) {
+        addFrequencyRecord(selectedTag.id, selectedTag.name, selectedTag.color, expenseAmount);
+      }
+
       // 重置表单并关闭弹窗
       setAmount('');
       setDate(getCurrentDate());
@@ -79,6 +93,30 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
           required
         />
       </div>
+      
+      {/* 高频填写记录 */}
+      {frequencyRecords.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs text-gray-500 mb-2">快捷填写</p>
+          <div className="flex flex-wrap gap-2">
+            {frequencyRecords.map((record, index) => (
+              <button
+                key={index}
+                type="button"
+                onClick={() => {
+                  setAmount(record.amount.toString());
+                  setTag(record.tagId);
+                }}
+                className="px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2"
+                style={{ backgroundColor: record.tagColor }}
+              >
+                <span>{record.tagName}</span>
+                <span className="text-gray-700">¥{record.amount.toFixed(2)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div>
         <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">

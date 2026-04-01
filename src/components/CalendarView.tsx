@@ -164,7 +164,7 @@ const CalendarView: React.FC = () => {
               <h3 className="text-lg font-bold text-gray-800">
                 {format(parseISO(selectedDate!), 'M月d日')} 支出明细
                 <span className="ml-2 text-sm text-gray-500">
-                  （合计 ¥{Math.round(getDayExpense(parseISO(selectedDate!)))}）
+                  （合计 ¥{getDayExpense(parseISO(selectedDate!)).toFixed(2)}）
                 </span>
               </h3>
               <button
@@ -199,7 +199,7 @@ const CalendarView: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="font-medium text-gray-800">
-                        <span className="text-sm">¥</span>{Math.round(expense.amount)}
+                        <span className="text-sm">¥</span>{expense.amount.toFixed(2)}
                       </div>
                         <button
                           onClick={() => handleDeleteExpense(expense.id)}
