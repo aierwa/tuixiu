@@ -30,6 +30,14 @@ const BudgetOverview: React.FC = () => {
     lastMonthBalance: budget.lastMonthBalance
   });
 
+  // 当预算数据更新时，同步更新编辑状态
+  useEffect(() => {
+    setEditMode({
+      monthlyAmount: budget.monthlyAmount,
+      lastMonthBalance: budget.lastMonthBalance
+    });
+  }, [budget.monthlyAmount, budget.lastMonthBalance]);
+
   // 环形图参数
   const radius = 80;
   const strokeWidth = 12;
