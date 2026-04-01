@@ -139,7 +139,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
               key={t.id}
               type="button"
               onClick={() => setTag(t.id)}
-              className={`px-4 py-2 rounded-lg transition-all duration-300 border-2 ${tag === t.id ? 'border-blue-500' : 'border-transparent'}`}
+              className={`px-4 py-2 rounded-lg transition-all duration-300 border-4 ${tag === t.id ? 'border-indigo-500' : 'border-transparent'}`}
               style={{ backgroundColor: t.color }}
             >
               <span>{t.name}</span>
