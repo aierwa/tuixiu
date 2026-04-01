@@ -224,14 +224,31 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
       } else if (ledger && !budgetError) {
         console.log('Creating new budget at:', new Date().toISOString(), 'currentMonth:', currentMonth);
+        
+        // 查询上个月的预算记录，获取结余
+        const lastMonth = new Date();
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        const lastMonthStr = lastMonth.toISOString().slice(0, 7); // 格式：YYYY-MM
+        
+        const { data: lastMonthBudgets, error: lastMonthError } = await supabase
+          .from('budgets')
+          .select('remaining')
+          .eq('ledger_id', ledgerId)
+          .eq('current_month', lastMonthStr)
+          .single();
+        
+        // 计算上月结余（如果没有上月记录则默认为0）
+        const lastMonthBalance = lastMonthBudgets?.remaining || 0;
+        console.log('Last month balance:', lastMonthBalance, 'for month:', lastMonthStr);
+        
         // 如果没有当月预算记录，创建新的预算记录
         const newBudget = {
           ledger_id: ledgerId,
           monthly_amount: ledger.default_monthly_budget,
           current_month: currentMonth,
-          remaining: ledger.default_monthly_budget,
+          remaining: ledger.default_monthly_budget + lastMonthBalance,
           spent: 0,
-          last_month_balance: 0
+          last_month_balance: lastMonthBalance
         };
 
         // 保存到数据库
@@ -254,11 +271,25 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           console.error('创建预算记录失败:', createError);
           alert('创建预算记录失败: ' + (createError?.message || '未知错误'));
           // 即使创建失败，也使用默认预算更新本地状态，确保用户可以正常使用
+          // 重新查询上月结余（如果前面查询失败）
+          const lastMonth = new Date();
+          lastMonth.setMonth(lastMonth.getMonth() - 1);
+          const lastMonthStr = lastMonth.toISOString().slice(0, 7);
+          
+          const { data: lastMonthBudgets } = await supabase
+            .from('budgets')
+            .select('remaining')
+            .eq('ledger_id', ledgerId)
+            .eq('current_month', lastMonthStr)
+            .single();
+          
+          const lastMonthBalance = lastMonthBudgets?.remaining || 0;
+          
           dispatch({
             type: 'SET_BUDGET',
             payload: {
               monthlyAmount: ledger.default_monthly_budget,
-              lastMonthBalance: 0
+              lastMonthBalance: lastMonthBalance
             }
           });
         }
