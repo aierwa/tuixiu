@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import { getCurrentDate } from '../utils/dateUtils';
 import { supabase } from '../lib/supabase';
@@ -13,7 +13,6 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(getCurrentDate());
-  const dateInputRef = useRef<HTMLInputElement>(null);
   const [tag, setTag] = useState(state.tags[0]?.id || '');
   const [outsideBudget, setOutsideBudget] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,16 +88,6 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
     }
   };
 
-  const openDatePicker = () => {
-    const el = dateInputRef.current;
-    if (!el) return;
-    if (typeof el.showPicker === 'function') {
-      el.showPicker();
-    } else {
-      el.click();
-    }
-  };
-
   const dayOfMonth =
     date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? parseInt(date.slice(8, 10), 10) : null;
 
@@ -117,37 +106,36 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
             step="0.01"
             required
           />
-          <input
-            ref={dateInputRef}
-            type="date"
-            id="expense-date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            required
-            aria-label="选择日期"
-            tabIndex={-1}
-            className="sr-only"
-          />
-          <button
-            type="button"
-            onClick={openDatePicker}
-            className="relative shrink-0 w-11 h-11 rounded-lg border border-gray-300 bg-white shadow-sm flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 hover:border-gray-400 transition-colors"
-            aria-label="选择日期"
-          >
-            <svg
-              className="absolute left-1 right-1 top-1.5 h-7 w-7 text-gray-400 pointer-events-none"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.75}
+          <div className="relative shrink-0 w-11 h-11 rounded-lg border border-gray-300 bg-white shadow-sm overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-0 hover:border-gray-400 transition-colors">
+            <input
+              type="date"
+              id="expense-date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
+              aria-label="选择日期"
+              className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
+              style={{ fontSize: 16 }}
+            />
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
               aria-hidden
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <span className="relative z-10 mt-2.5 text-sm font-bold text-gray-800 tabular-nums leading-none pointer-events-none">
-              {dayOfMonth ?? '—'}
-            </span>
-          </button>
+              <svg
+                className="absolute left-1 right-1 top-1.5 h-7 w-7 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                aria-hidden
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span className="relative z-10 mt-2.5 text-sm font-bold text-gray-800 tabular-nums leading-none">
+                {dayOfMonth ?? '—'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
       
