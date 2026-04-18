@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useState, useCallback, useRef } from 'react';
 import { AppState, Action, Expense, Tag } from '../types';
 import { supabase } from '../lib/supabase';
+import { getStoredBookkeeper } from '../utils/bookkeeperStorage';
 import { 
   calculateMonthlySpent, 
   updateBudgetForNewMonth, 
@@ -18,7 +19,8 @@ const initialState: AppState = {
   },
   expenses: [],
   tags: [],
-  isAuthenticated: false
+  isAuthenticated: false,
+  currentBookkeeper: null
 };
 
 // Reducer 函数
@@ -105,6 +107,12 @@ const budgetReducer = (state: AppState, action: Action): AppState => {
       return {
         ...state,
         isAuthenticated: action.payload
+      };
+
+    case 'SET_BOOKKEEPER':
+      return {
+        ...state,
+        currentBookkeeper: action.payload
       };
     
     case 'CLEAR_EXPENSES':
@@ -298,17 +306,20 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // 清空现有支出数据
       dispatch({ type: 'CLEAR_EXPENSES' });
 
-      // 加载支出
+      // 加载支出（关联记账人名称便于展示）
       const { data: expenses, error: expensesError } = await supabase
         .from('expenses')
-        .select('*')
+        .select('*, bookkeeper:bookkeepers(name)')
         .eq('ledger_id', ledgerId);
 
       if (!expensesError && expenses) {
-        expenses.forEach(expense => {
+        expenses.forEach((raw: Record<string, unknown>) => {
+          const nested = raw.bookkeeper as { name?: string } | null | undefined;
+          const bookkeeper_name = nested?.name ?? null;
+          const { bookkeeper: _bk, ...rest } = raw;
           dispatch({
             type: 'ADD_EXPENSE',
-            payload: expense
+            payload: { ...rest, bookkeeper_name } as Expense
           });
         });
       }
@@ -367,6 +378,11 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       dispatch({ type: 'SET_LEDGER', payload: ledger });
       await loadData(authData.ledgerId, ledger);
+      const storedBk = getStoredBookkeeper(authData.ledgerId);
+      dispatch({
+        type: 'SET_BOOKKEEPER',
+        payload: storedBk ? { id: storedBk.id, name: storedBk.name } : null
+      });
       return true;
     } catch (error) {
       console.error('Auth check failed:', error);

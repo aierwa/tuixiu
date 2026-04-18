@@ -13,6 +13,7 @@
 - **日历视图**：在首页展示日历，直观查看支出分布
 - **数据持久化**：使用 Supabase 远端存储数据，确保数据不丢失，支持多人共同记账
 - **账本验证**：以账本为单位进行权限验证，确保数据安全
+- **记账人标识**：账本下维护多名记账人；登录后选择身份，支出写入 `bookkeeper_id`，日历当日明细可展示记账人标签
 
 ## 技术栈
 
@@ -41,7 +42,7 @@ src/
 │   ├── ExpenseList.tsx       # 支出列表组件
 │   ├── TagManager.tsx        # 标签管理组件
 │   ├── LedgerAuth.tsx        # 账本验证组件
-│   ├── VoiceInput.tsx        # 语音输入组件
+│   ├── BookkeeperPicker.tsx  # 登录后选择记账人
 │   └── Notification.tsx      # 通知弹窗组件
 ├── contexts/            # 状态管理
 │   └── BudgetContext.tsx     # 预算上下文（包含 reducer）
@@ -53,7 +54,8 @@ src/
 │   └── index.ts              # 接口类型定义
 ├── utils/               # 工具函数
 │   ├── budgetUtils.ts        # 预算相关工具
-│   └── dateUtils.ts          # 日期相关工具
+│   ├── dateUtils.ts          # 日期相关工具
+│   └── bookkeeperStorage.ts  # 记账人本地存储（与 ledgerId 绑定）
 ├── App.tsx              # 应用主组件
 ├── main.tsx             # 应用入口
 └── index.css            # 全局样式
@@ -112,9 +114,17 @@ src/
 - 未验证用户无法访问应用
 - 支持密码哈希验证
 
-### 6. 语音记账
+### 6. 记账人标识
 
-**VoiceInput 组件**：
+- **数据表**：`bookkeepers`（`ledger_id` 关联账本，`name` 为展示名），在 Supabase 中手工维护；`expenses.bookkeeper_id` 可选外键，兼容历史无记账人支出。
+- **BookkeeperPicker**：账本密码验证成功并加载数据后，若本地尚未保存当前账本的记账人，则先弹出选择页；列表数据来自 `bookkeepers` 表。
+- **本地存储**：键名 `budget-app-bookkeeper`，内容为 `{ id, name, ledgerId }`，仅保存在浏览器。
+- **BudgetSetting**：设置页顶部可重新选择并保存记账人；之后新产生的支出（表单与语音批量）均使用该身份。
+- **CalendarView**：点击日历某日打开当日明细时，若该笔支出有关联记账人名称，则在标签旁以小标签展示；无记账人时不展示占位文案。
+
+### 7. 语音记账
+
+**语音相关逻辑（集成在 App 内）**：
 - 长按添加按钮触发语音输入
 - 支持录制语音并转换为文字
 - 调用 Tencent Cloud ASR 进行语音识别
@@ -133,7 +143,7 @@ src/
 应用使用 React Context API 结合 useReducer 进行状态管理：
 
 - **BudgetContext**：提供全局状态和 dispatch 方法
-- **状态结构**：包含 budget（预算）、expenses（支出）、tags（标签）、ledger（当前账本）、isAuthenticated（认证状态）
+- **状态结构**：包含 budget（预算）、expenses（支出）、tags（标签）、ledger（当前账本）、isAuthenticated（认证状态）、currentBookkeeper（当前选择的记账人）
 - **数据持久化**：使用 Supabase 远端存储状态，确保数据不丢失
 - **本地缓存**：保持本地缓存以提高性能
 - **跨月处理**：自动检测月份变化，更新预算状态
@@ -165,6 +175,7 @@ src/
 
 3. **创建数据库表**：
    - 在 Supabase 控制台的 SQL 编辑器中执行 `supabase_schema.sql` 文件中的 SQL 语句
+   - 文件前半段为基线表结构；**记账人相关表与字段**在文件末尾「追加迁移」注释段，新建项目可整文件执行，已有数据库可仅执行该段
 
 4. **添加账本记录**：
    - 生成密码哈希：
@@ -187,17 +198,23 @@ src/
      - `password_hash`：生成的密码哈希值
      - `default_monthly_budget`：默认月度预算（可选，默认为 8000）
 
-5. **启动开发服务器**：
+5. **添加记账人**：
+   - 在 `ledgers` 中已有对应账本记录后，在 Table Editor 或 SQL 中向 `bookkeepers` 表插入行：
+     - `ledger_id`：该账本的 UUID（与 `ledgers.id` 一致）
+     - `name`：记账人显示名称（如家庭成员姓名）
+   - 至少插入一条，否则登录后选择记账人步骤无选项可用
+
+6. **启动开发服务器**：
    ```bash
    npm run dev
    ```
 
-6. **构建生产版本**：
+7. **构建生产版本**：
    ```bash
    npm run build
    ```
 
-7. **代码检查**：
+8. **代码检查**：
    ```bash
    npm run lint
    ```
@@ -248,6 +265,19 @@ interface Expense {
   date: string;                    // 日期 (YYYY-MM-DD)
   tag: string;                     // 标签
   description?: string;            // 描述（可选）
+  bookkeeper_id?: string | null;   // 记账人 ID（Supabase）
+  bookkeeper_name?: string | null; // 展示用名称（关联或写入时附带）
+}
+```
+
+### 记账人 (Bookkeeper)
+
+```typescript
+interface Bookkeeper {
+  id: string;
+  ledger_id: string;
+  name: string;
+  created_at?: string;
 }
 ```
 
@@ -302,6 +332,7 @@ const { state, dispatch, loading, checkAuth, loadData } = useBudget();
 - `UPDATE_BUDGET_STATUS`：更新预算状态（跨月处理）
 - `SET_LEDGER`：设置当前账本
 - `SET_AUTHENTICATED`：设置认证状态
+- `SET_BOOKKEEPER`：设置当前浏览器选择的记账人（与本地存储同步）
 
 ## 项目特色
 
@@ -312,7 +343,7 @@ const { state, dispatch, loading, checkAuth, loadData } = useBudget();
 5. **智能的标签管理**：颜色区分，网格选择
 6. **数据持久化**：Supabase 远端存储，数据不丢失
 7. **跨月自动处理**：自动更新预算状态
-8. **多人共同记账**：支持多用户使用同一账本
+8. **多人共同记账**：支持多用户使用同一账本；支持多名记账人区分支出归属
 9. **安全验证**：使用 bcrypt 进行密码哈希验证
 10. **实时同步**：数据实时同步到 Supabase
 
@@ -325,9 +356,10 @@ const { state, dispatch, loading, checkAuth, loadData } = useBudget();
 - 检查浏览器控制台的错误信息
 - 查看 Supabase 控制台的日志
 - 验证本地存储中的认证信息：`localStorage.getItem('budget-app-auth')`
+- 记账人选择结果：`localStorage.getItem('budget-app-bookkeeper')`
 
 ## 总结
 
 这是一个功能完整、界面美观的移动端记账应用，采用现代前端技术栈开发。通过本文档的指引，开发者可以快速了解项目结构和功能实现，为后续的开发和扩展提供参考。
 
-应用现已支持多人共同记账，通过 Supabase 远端存储实现数据同步，确保数据安全和一致性。用户可以在不同设备上访问同一账本，实现数据的实时共享。
+应用现已支持多人共同记账，通过 Supabase 远端存储实现数据同步，确保数据安全和一致性。用户可以在不同设备上访问同一账本，实现数据的实时共享。同一账本内可通过记账人标识区分不同成员产生的支出，并在日历明细中按需展示。

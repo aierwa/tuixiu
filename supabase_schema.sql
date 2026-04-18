@@ -67,3 +67,27 @@ CREATE POLICY "Allow all access to tags" ON tags
   FOR ALL USING (true);
 
 -- 注意：在生产环境中，应该根据验证机制创建更严格的行级安全策略
+
+-- =============================================================================
+-- 以下为追加迁移（记账人）；新建库可整文件执行，已有库从本节起执行即可
+-- =============================================================================
+
+-- 账本下的记账人（在 Supabase 中按 ledger_id 手动维护数据）
+CREATE TABLE IF NOT EXISTS bookkeepers (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  ledger_id UUID NOT NULL REFERENCES ledgers(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 支出关联记账人（可为空，兼容历史数据）
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS bookkeeper_id UUID REFERENCES bookkeepers(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_bookkeepers_ledger_id ON bookkeepers(ledger_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_bookkeeper_id ON expenses(bookkeeper_id);
+
+ALTER TABLE bookkeepers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all access to bookkeepers" ON bookkeepers
+  FOR ALL USING (true);

@@ -191,8 +191,15 @@ const CalendarView: React.FC = () => {
                   
                   return (
                     <div key={expense.id} className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: tagColor }}>
-                      <div>
-                        <div className="font-medium text-gray-800">{expense.tag}</div>
+                      <div className="min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-gray-800">{expense.tag}</span>
+                          {expense.bookkeeper_name && (
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/70 text-gray-700 border border-gray-200/80 shrink-0">
+                              {expense.bookkeeper_name}
+                            </span>
+                          )}
+                        </div>
                         {expense.description && (
                           <div className="text-xs text-gray-500">{expense.description}</div>
                         )}

@@ -7,6 +7,7 @@ import ExpenseList from './components/ExpenseList';
 import CalendarView from './components/CalendarView';
 import TagManager from './components/TagManager';
 import LedgerAuth from './components/LedgerAuth';
+import BookkeeperPicker from './components/BookkeeperPicker';
 import Notification from './components/Notification';
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
@@ -452,6 +453,10 @@ function AppContent() {
 
   // 添加支出到Supabase
   const addExpenses = async (expenses: any[]) => {
+    if (!state.currentBookkeeper) {
+      handleVoiceInputError('请先在设置中选择记账人');
+      return { count: 0, expenses: [] };
+    }
     let addedCount = 0;
     const addedExpenses: any[] = [];
     for (const expense of expenses) {
@@ -471,7 +476,8 @@ function AppContent() {
             amount: expense.amount,
             date: expense.date,
             tag: expense.tag,
-            description: ''
+            description: '',
+            bookkeeper_id: state.currentBookkeeper?.id ?? null
           })
           .select()
           .single();
@@ -483,7 +489,10 @@ function AppContent() {
         // 提交支出记录到本地状态
         dispatch({
           type: 'ADD_EXPENSE',
-          payload: data
+          payload: {
+            ...data,
+            bookkeeper_name: state.currentBookkeeper?.name ?? null
+          }
         });
         addedCount++;
         addedExpenses.push(data);
@@ -716,7 +725,7 @@ function App() {
 }
 
 function AppWithAuth() {
-  const { state, checkAuth } = useBudget();
+  const { state, checkAuth, dispatch } = useBudget();
   const [loading, setLoading] = useState(true);
   const initialized = useRef(false);
 
@@ -762,13 +771,20 @@ function AppWithAuth() {
     );
   }
 
-  return (
-    state.isAuthenticated ? (
-      <AppContent />
-    ) : (
-      <LedgerAuth onSuccess={handleAuthSuccess} />
-    )
-  );
+  if (!state.isAuthenticated) {
+    return <LedgerAuth onSuccess={handleAuthSuccess} />;
+  }
+
+  if (state.ledger && !state.currentBookkeeper) {
+    return (
+      <BookkeeperPicker
+        ledgerId={state.ledger.id}
+        onSelected={(bk) => dispatch({ type: 'SET_BOOKKEEPER', payload: bk })}
+      />
+    );
+  }
+
+  return <AppContent />;
 }
 
 export default App;

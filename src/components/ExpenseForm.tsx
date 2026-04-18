@@ -26,6 +26,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
     e.preventDefault();
     
     if (!amount || !tag || !state.ledger) return;
+    if (!state.currentBookkeeper) {
+      alert('请先在设置中选择记账人');
+      return;
+    }
     
     const expenseAmount = parseFloat(amount);
     if (isNaN(expenseAmount) || expenseAmount <= 0) return;
@@ -41,7 +45,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
           amount: expenseAmount,
           date,
           tag: state.tags.find(t => t.id === tag)?.name || '',
-          description: ''
+          description: '',
+          bookkeeper_id: state.currentBookkeeper?.id ?? null
         })
         .select()
         .single();
@@ -53,7 +58,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
       // 提交支出记录到本地状态
       dispatch({
         type: 'ADD_EXPENSE',
-        payload: data
+        payload: {
+          ...data,
+          bookkeeper_name: state.currentBookkeeper?.name ?? null
+        }
       });
 
       // 添加高频记录

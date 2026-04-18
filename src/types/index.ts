@@ -17,6 +17,16 @@ export interface Expense {
   date: string;                    // 日期 (YYYY-MM-DD)
   tag: string;                     // 标签
   description?: string;            // 描述（可选）
+  bookkeeper_id?: string | null;   // 记账人 ID（Supabase）
+  bookkeeper_name?: string | null; // 展示用名称（关联查询或写入时附带）
+}
+
+// 账本下的记账人（Supabase bookkeepers 表）
+export interface Bookkeeper {
+  id: string;
+  ledger_id: string;
+  name: string;
+  created_at?: string;
 }
 
 // 标签数据接口
@@ -43,6 +53,7 @@ export interface AppState {
   tags: Tag[];
   ledger?: Ledger;                 // 当前账本
   isAuthenticated: boolean;        // 认证状态
+  currentBookkeeper: { id: string; name: string } | null; // 当前浏览器选择的记账人
 }
 
 // 动作类型
@@ -57,4 +68,5 @@ export type Action =
   | { type: 'CLEAR_TAGS' }
   | { type: 'UPDATE_BUDGET_STATUS' }
   | { type: 'SET_LEDGER'; payload: Ledger }
-  | { type: 'SET_AUTHENTICATED'; payload: boolean };
+  | { type: 'SET_AUTHENTICATED'; payload: boolean }
+  | { type: 'SET_BOOKKEEPER'; payload: { id: string; name: string } | null };
