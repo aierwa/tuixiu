@@ -86,15 +86,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
-          金额
-        </label>
         <input
           type="number"
           id="amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className="w-full px-4 py-3.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 text-lg"
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 text-lg"
           placeholder="请输入金额"
           min="0.01"
           step="0.01"
@@ -115,7 +112,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
                   setAmount(record.amount.toString());
                   setTag(record.tagId);
                 }}
-                className="px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2"
+                className="px-2 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 flex items-center gap-1.5"
                 style={{ backgroundColor: record.tagColor }}
               >
                 <span>{record.tagName}</span>
@@ -135,7 +132,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
           id="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="w-full px-4 py-3.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 text-lg"
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 text-lg"
           required
         />
       </div>
@@ -150,7 +147,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
               key={t.id}
               type="button"
               onClick={() => setTag(t.id)}
-              className={`px-4 py-2 rounded-lg transition-all duration-300 border-2 ${tag === t.id ? 'border-blue-500' : 'border-transparent'}`}
+              className={`px-4 py-2 rounded-lg transition-all duration-300 border-4 ${tag === t.id ? 'border-indigo-500' : 'border-transparent'}`}
               style={{ backgroundColor: t.color }}
             >
               <span>{t.name}</span>
@@ -162,7 +159,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full px-4 py-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed text-lg font-medium"
+        className="w-full px-4 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-gray-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-lg font-medium"
       >
         {isSubmitting ? '添加中...' : '添加支出'}
       </button>

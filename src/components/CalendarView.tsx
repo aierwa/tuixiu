@@ -183,7 +183,7 @@ const CalendarView: React.FC = () => {
                 当天无支出记录
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                 {getDayExpenses(parseISO(selectedDate)).map((expense) => {
                   // 查找标签对应的颜色
                   const tagInfo = state.tags.find(t => t.name === expense.tag);

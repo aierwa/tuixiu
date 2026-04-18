@@ -64,17 +64,19 @@ export const addFrequencyRecord = (tagId: string, tagName: string, tagColor: str
     return b.lastUsed - a.lastUsed; // 其次按最后使用时间降序
   });
   
-  // 只保留前3个记录
-  const topRecords = records.slice(0, 3);
+  // 只保留前50个记录，超过则移除最旧的
+  const storedRecords = records.slice(0, 50);
   
   // 保存到本地存储
-  saveFrequencyRecords(topRecords);
+  saveFrequencyRecords(storedRecords);
   
-  return topRecords;
+  // 返回前3个记录用于显示
+  return storedRecords.slice(0, 3);
 };
 
 // 获取前3个高频填写记录
 export const getTopFrequencyRecords = (): FrequencyRecord[] => {
   const records = getFrequencyRecords();
+  // 确保返回前3个记录
   return records.slice(0, 3);
 };
