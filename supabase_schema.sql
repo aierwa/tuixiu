@@ -91,3 +91,10 @@ ALTER TABLE bookkeepers ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow all access to bookkeepers" ON bookkeepers
   FOR ALL USING (true);
+
+-- =============================================================================
+-- 预算外支出（不计入本月预算的 spent/remaining，仍计入总支出与分类汇总展示）
+-- =============================================================================
+
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS outside_budget BOOLEAN NOT NULL DEFAULT false;

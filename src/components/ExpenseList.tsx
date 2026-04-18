@@ -21,22 +21,31 @@ const ExpenseList: React.FC = () => {
     return expenseDate >= new Date(startDate) && expenseDate <= new Date(endDate);
   });
 
-  // 按标签分组计算支出金额
-  const expensesByTag = filteredExpenses.reduce((acc, expense) => {
-    if (!acc[expense.tag]) {
-      acc[expense.tag] = 0;
+  // 按标签分组：全额与预算外金额（总支出含预算外；小字展示预算外部分）
+  const { expensesByTag, outsideByTag } = filteredExpenses.reduce(
+    (acc, expense) => {
+      if (!acc.expensesByTag[expense.tag]) acc.expensesByTag[expense.tag] = 0;
+      acc.expensesByTag[expense.tag] += expense.amount;
+      if (expense.outside_budget) {
+        if (!acc.outsideByTag[expense.tag]) acc.outsideByTag[expense.tag] = 0;
+        acc.outsideByTag[expense.tag] += expense.amount;
+      }
+      return acc;
+    },
+    {
+      expensesByTag: {} as Record<string, number>,
+      outsideByTag: {} as Record<string, number>
     }
-    acc[expense.tag] += expense.amount;
-    return acc;
-  }, {} as Record<string, number>);
+  );
 
   // 转换为数组并按金额降序排序
   const sortedTagExpenses = Object.entries(expensesByTag)
     .map(([tag, amount]) => ({ tag, amount }))
     .sort((a, b) => b.amount - a.amount);
 
-  // 计算总支出
+  // 计算总支出（含预算外）
   const totalExpense = Object.values(expensesByTag).reduce((sum, amount) => sum + amount, 0);
+  const totalOutsideExpense = Object.values(outsideByTag).reduce((sum, n) => sum + n, 0);
 
   return (
     <div className="bg-white rounded-xl shadow-md p-6 transition-all duration-300 hover:shadow-lg">
@@ -76,9 +85,16 @@ const ExpenseList: React.FC = () => {
         <div className="space-y-4">
           {/* 总支出 */}
           <div className="p-3 bg-gray-50 rounded-lg">
-            <div className="flex justify-between items-center">
-              <span className="text-lg font-medium text-gray-800">总支出</span>
-              <span className="text-2xl font-bold text-gray-800"><span className="font-normal text-lg">¥</span>{Math.round(totalExpense)}</span>
+            <div className="flex justify-between items-baseline gap-3">
+              <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                <span className="text-lg font-medium text-gray-800">总支出</span>
+                {totalOutsideExpense > 0 && (
+                  <span className="text-xs text-gray-500 font-normal">含预算外¥{Math.round(totalOutsideExpense)}</span>
+                )}
+              </div>
+              <span className="text-2xl font-bold text-gray-800 shrink-0 tabular-nums">
+                <span className="font-normal text-lg">¥</span>{Math.round(totalExpense)}
+              </span>
             </div>
           </div>
           
@@ -90,6 +106,7 @@ const ExpenseList: React.FC = () => {
               const tagColor = tagInfo?.color || '#E5E7EB';
               // 计算百分比
               const percentage = totalExpense > 0 ? (amount / totalExpense) * 100 : 0;
+              const outsideForTag = outsideByTag[tag] ?? 0;
               
               return (
                 <div 
@@ -99,10 +116,15 @@ const ExpenseList: React.FC = () => {
                     background: `linear-gradient(to right, ${tagColor} ${percentage}%, #F3F4F6 ${percentage}%)`
                   }}
                 >
-                  <div className="font-medium text-gray-800 relative z-10">{tag}</div>
-                  <div className="flex items-center gap-3 relative z-10">
-                    <span className="font-bold text-gray-800"><span className="font-normal text-sm">¥</span>{Math.round(amount)}</span>
-                    <span className="text-sm text-gray-600">
+                  <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 relative z-10 pr-2">
+                    <span className="font-medium text-gray-800">{tag}</span>
+                    {outsideForTag > 0 && (
+                      <span className="text-[11px] text-gray-700 font-normal">含预算外¥{Math.round(outsideForTag)}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0 relative z-10 tabular-nums">
+                    <span className="font-bold text-gray-800 whitespace-nowrap"><span className="font-normal text-sm">¥</span>{Math.round(amount)}</span>
+                    <span className="text-sm text-gray-600 whitespace-nowrap">
                       ({Math.round(percentage)}%)
                     </span>
                   </div>

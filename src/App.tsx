@@ -477,7 +477,8 @@ function AppContent() {
             date: expense.date,
             tag: expense.tag,
             description: '',
-            bookkeeper_id: state.currentBookkeeper?.id ?? null
+            bookkeeper_id: state.currentBookkeeper?.id ?? null,
+            outside_budget: false
           })
           .select()
           .single();

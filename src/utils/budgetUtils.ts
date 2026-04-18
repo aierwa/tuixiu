@@ -1,10 +1,11 @@
 import { Budget, Expense } from '../types';
 import { getCurrentMonth, isDateInCurrentMonth } from './dateUtils';
 
-// 计算当月支出总额
+// 计算当月计入预算的支出总额（预算外不计入）
 export const calculateMonthlySpent = (expenses: Expense[]): number => {
   return expenses
     .filter(expense => isDateInCurrentMonth(expense.date))
+    .filter(expense => !expense.outside_budget)
     .reduce((total, expense) => total + expense.amount, 0);
 };
 

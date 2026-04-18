@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import { getCurrentDate } from '../utils/dateUtils';
 import { supabase } from '../lib/supabase';
@@ -11,8 +11,11 @@ interface ExpenseFormProps {
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
   const { state, dispatch } = useBudget();
   const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
   const [date, setDate] = useState(getCurrentDate());
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const [tag, setTag] = useState(state.tags[0]?.id || '');
+  const [outsideBudget, setOutsideBudget] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [frequencyRecords, setFrequencyRecords] = useState<FrequencyRecord[]>([]);
 
@@ -45,8 +48,9 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
           amount: expenseAmount,
           date,
           tag: state.tags.find(t => t.id === tag)?.name || '',
-          description: '',
-          bookkeeper_id: state.currentBookkeeper?.id ?? null
+          description: note.trim() || null,
+          bookkeeper_id: state.currentBookkeeper?.id ?? null,
+          outside_budget: outsideBudget
         })
         .select()
         .single();
@@ -72,8 +76,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
 
       // 重置表单并关闭弹窗
       setAmount('');
+      setNote('');
       setDate(getCurrentDate());
       setTag(state.tags[0]?.id || '');
+      setOutsideBudget(false);
       onClose();
     } catch (error) {
       console.error('添加支出失败:', error);
@@ -83,20 +89,66 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
     }
   };
 
+  const openDatePicker = () => {
+    const el = dateInputRef.current;
+    if (!el) return;
+    if (typeof el.showPicker === 'function') {
+      el.showPicker();
+    } else {
+      el.click();
+    }
+  };
+
+  const dayOfMonth =
+    date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? parseInt(date.slice(8, 10), 10) : null;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <input
-          type="number"
-          id="amount"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 text-lg"
-          placeholder="请输入金额"
-          min="0.01"
-          step="0.01"
-          required
-        />
+        <div className="flex gap-2 items-stretch">
+          <input
+            type="number"
+            id="amount"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="flex-1 min-w-0 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 text-lg"
+            placeholder="请输入金额"
+            min="0.01"
+            step="0.01"
+            required
+          />
+          <input
+            ref={dateInputRef}
+            type="date"
+            id="expense-date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            required
+            aria-label="选择日期"
+            tabIndex={-1}
+            className="sr-only"
+          />
+          <button
+            type="button"
+            onClick={openDatePicker}
+            className="relative shrink-0 w-11 h-11 rounded-lg border border-gray-300 bg-white shadow-sm flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 hover:border-gray-400 transition-colors"
+            aria-label="选择日期"
+          >
+            <svg
+              className="absolute left-1 right-1 top-1.5 h-7 w-7 text-gray-400 pointer-events-none"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.75}
+              aria-hidden
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="relative z-10 mt-2.5 text-sm font-bold text-gray-800 tabular-nums leading-none pointer-events-none">
+              {dayOfMonth ?? '—'}
+            </span>
+          </button>
+        </div>
       </div>
       
       {/* 高频填写记录 */}
@@ -124,37 +176,48 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose }) => {
       )}
       
       <div>
-        <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-          日期
+        <label htmlFor="expense-note" className="block text-xs text-gray-500 mb-0.5">
+          备注
         </label>
-        <input
-          type="date"
-          id="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 text-lg"
-          required
+        <textarea
+          id="expense-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="选填"
+          maxLength={500}
+          rows={1}
+          className="w-full min-h-[1.75rem] max-h-16 px-2 py-1 text-xs leading-tight border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none placeholder:text-gray-400 overflow-y-auto"
         />
       </div>
-      
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           标签
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-1.5">
           {state.tags.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTag(t.id)}
-              className={`px-4 py-2 rounded-lg transition-all duration-300 border-4 ${tag === t.id ? 'border-indigo-500' : 'border-transparent'}`}
+              className={`min-h-0 min-w-0 px-2 py-1.5 rounded-lg text-sm transition-all duration-300 border-2 ${tag === t.id ? 'border-indigo-500' : 'border-transparent'}`}
               style={{ backgroundColor: t.color }}
             >
-              <span>{t.name}</span>
+              <span className="block truncate text-center leading-tight">{t.name}</span>
             </button>
           ))}
         </div>
       </div>
+
+      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={outsideBudget}
+          onChange={(e) => setOutsideBudget(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+        />
+        <span className="text-sm text-gray-700">预算外支出（不计入本月预算）</span>
+      </label>
       
       <button
         type="submit"

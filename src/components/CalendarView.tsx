@@ -195,14 +195,24 @@ const CalendarView: React.FC = () => {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-gray-800">{expense.tag}</span>
                           {expense.bookkeeper_name && (
-                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/70 text-gray-700 border border-gray-200/80 shrink-0">
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/70 text-gray-700 border border-gray-200/80 shrink-0 max-w-[8rem] truncate" title={expense.bookkeeper_name}>
                               {expense.bookkeeper_name}
                             </span>
                           )}
+                          {expense.outside_budget && (
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/70 text-gray-700 border border-gray-200/80 shrink-0">
+                              外
+                            </span>
+                          )}
+                          {expense.description && (
+                            <span
+                              className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100/95 text-amber-950 border border-amber-200/90 shrink-0 max-w-[11rem] line-clamp-2 break-words"
+                              title={expense.description}
+                            >
+                              {expense.description}
+                            </span>
+                          )}
                         </div>
-                        {expense.description && (
-                          <div className="text-xs text-gray-500">{expense.description}</div>
-                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="font-medium text-gray-800">

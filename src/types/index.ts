@@ -16,9 +16,10 @@ export interface Expense {
   amount: number;                  // 金额
   date: string;                    // 日期 (YYYY-MM-DD)
   tag: string;                     // 标签
-  description?: string;            // 描述（可选）
+  description?: string | null;     // 备注（可选，对应数据库 description）
   bookkeeper_id?: string | null;   // 记账人 ID（Supabase）
   bookkeeper_name?: string | null; // 展示用名称（关联查询或写入时附带）
+  outside_budget?: boolean;        // 是否预算外（true 时不计入本月预算统计）
 }
 
 // 账本下的记账人（Supabase bookkeepers 表）
