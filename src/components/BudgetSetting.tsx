@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import { supabase } from '../lib/supabase';
 import type { Bookkeeper } from '../types';
+import { calculateEffectiveBudget } from '../utils/budgetUtils';
 import { setStoredBookkeeper } from '../utils/bookkeeperStorage';
 
 const BudgetSetting: React.FC = () => {
@@ -60,7 +61,10 @@ const BudgetSetting: React.FC = () => {
       try {
         // 计算剩余预算和已支出金额
         const spent = state.budget.spent;
-        const remaining = amount + state.budget.lastMonthBalance - spent;
+        const remaining = calculateEffectiveBudget({
+          monthlyAmount: amount,
+          lastMonthBalance: state.budget.lastMonthBalance
+        }) - spent;
 
         // 检查是否已有预算记录
         const { data: existingBudget, error: fetchError } = await supabase

@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { getStoredBookkeeper } from '../utils/bookkeeperStorage';
 import { 
   calculateMonthlySpent, 
+  calculateEffectiveBudget,
+  calculateNextLastMonthBalance,
   updateBudgetForNewMonth, 
   shouldUpdateBudget
 } from '../utils/budgetUtils';
@@ -34,7 +36,10 @@ const budgetReducer = (state: AppState, action: Action): AppState => {
           monthlyAmount: action.payload.monthlyAmount,
           lastMonthBalance: action.payload.lastMonthBalance,
           currentMonth: new Date().toISOString().slice(0, 7), // 格式：YYYY-MM
-          remaining: action.payload.monthlyAmount + action.payload.lastMonthBalance - state.budget.spent
+          remaining: calculateEffectiveBudget({
+            monthlyAmount: action.payload.monthlyAmount,
+            lastMonthBalance: action.payload.lastMonthBalance
+          }) - state.budget.spent
         }
       };
     
@@ -48,7 +53,7 @@ const budgetReducer = (state: AppState, action: Action): AppState => {
         budget: {
           ...state.budget,
           spent: newSpent,
-          remaining: state.budget.monthlyAmount + state.budget.lastMonthBalance - newSpent
+          remaining: calculateEffectiveBudget(state.budget) - newSpent
         }
       };
     
@@ -61,7 +66,7 @@ const budgetReducer = (state: AppState, action: Action): AppState => {
         budget: {
           ...state.budget,
           spent: deletedSpent,
-          remaining: state.budget.monthlyAmount + state.budget.lastMonthBalance - deletedSpent
+          remaining: calculateEffectiveBudget(state.budget) - deletedSpent
         }
       };
     
@@ -122,7 +127,7 @@ const budgetReducer = (state: AppState, action: Action): AppState => {
         budget: {
           ...state.budget,
           spent: 0,
-          remaining: state.budget.monthlyAmount + state.budget.lastMonthBalance
+          remaining: calculateEffectiveBudget(state.budget)
         }
       };
     
@@ -240,13 +245,18 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         
         const { data: lastMonthBudgets } = await supabase
           .from('budgets')
-          .select('remaining')
+          .select('remaining, last_month_balance')
           .eq('ledger_id', ledgerId)
           .eq('current_month', lastMonthStr)
           .single();
         
-        // 计算上月结余（如果没有上月记录则默认为0）
-        const lastMonthBalance = lastMonthBudgets?.remaining || 0;
+        // 累计上月结余：正数历史累加，负数仅滚动 remaining
+        const lastMonthBalance = lastMonthBudgets
+          ? calculateNextLastMonthBalance({
+              lastMonthBalance: lastMonthBudgets.last_month_balance || 0,
+              remaining: lastMonthBudgets.remaining || 0
+            })
+          : 0;
         console.log('Last month balance:', lastMonthBalance, 'for month:', lastMonthStr);
         
         // 如果没有当月预算记录，创建新的预算记录
@@ -254,7 +264,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           ledger_id: ledgerId,
           monthly_amount: ledger.default_monthly_budget,
           current_month: currentMonth,
-          remaining: ledger.default_monthly_budget + lastMonthBalance,
+          remaining: ledger.default_monthly_budget + Math.min(0, lastMonthBalance),
           spent: 0,
           last_month_balance: lastMonthBalance
         };
@@ -286,12 +296,17 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           
           const { data: lastMonthBudgets } = await supabase
             .from('budgets')
-            .select('remaining')
+            .select('remaining, last_month_balance')
             .eq('ledger_id', ledgerId)
             .eq('current_month', lastMonthStr)
             .single();
           
-          const lastMonthBalance = lastMonthBudgets?.remaining || 0;
+          const lastMonthBalance = lastMonthBudgets
+            ? calculateNextLastMonthBalance({
+                lastMonthBalance: lastMonthBudgets.last_month_balance || 0,
+                remaining: lastMonthBudgets.remaining || 0
+              })
+            : 0;
           
           dispatch({
             type: 'SET_BUDGET',

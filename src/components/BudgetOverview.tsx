@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import { getDaysRemainingInMonth } from '../utils/dateUtils';
-import { calculateDailyRemaining } from '../utils/budgetUtils';
+import { calculateDailyRemaining, calculateEffectiveBudget } from '../utils/budgetUtils';
 
 const BudgetOverview: React.FC = () => {
   const { state, dispatch } = useBudget();
@@ -12,7 +12,7 @@ const BudgetOverview: React.FC = () => {
   const dailyRemaining = calculateDailyRemaining(budget.remaining, daysRemaining);
 
   // 计算预算使用百分比
-  const totalBudget = budget.monthlyAmount + budget.lastMonthBalance;
+  const totalBudget = calculateEffectiveBudget(budget);
   const usagePercentage = budget.remaining < 0 ? 100 : (totalBudget > 0 ? (budget.spent / totalBudget) * 100 : 0);
   
   // 动画状态
@@ -26,17 +26,15 @@ const BudgetOverview: React.FC = () => {
   // 弹窗状态
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [editMode, setEditMode] = useState({
-    monthlyAmount: budget.monthlyAmount,
-    lastMonthBalance: budget.lastMonthBalance
+    monthlyAmount: budget.monthlyAmount
   });
 
   // 当预算数据更新时，同步更新编辑状态
   useEffect(() => {
     setEditMode({
-      monthlyAmount: budget.monthlyAmount,
-      lastMonthBalance: budget.lastMonthBalance
+      monthlyAmount: budget.monthlyAmount
     });
-  }, [budget.monthlyAmount, budget.lastMonthBalance]);
+  }, [budget.monthlyAmount]);
 
   // 环形图参数
   const radius = 80;
@@ -146,7 +144,7 @@ const BudgetOverview: React.FC = () => {
       type: 'SET_BUDGET',
       payload: {
         monthlyAmount: parseFloat(editMode.monthlyAmount.toString()) || 0,
-        lastMonthBalance: parseFloat(editMode.lastMonthBalance.toString()) || 0
+        lastMonthBalance: budget.lastMonthBalance
       }
     });
     setShowDetailModal(false);
@@ -268,7 +266,7 @@ const BudgetOverview: React.FC = () => {
                   ¥{totalBudget.toFixed(2)}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">由基础预算和上月结余计算得出</p>
+              <p className="text-xs text-slate-400">由基础预算与上月结余计算（正数不叠加，上限为本月基础预算）</p>
             </div>
 
             {/* 本月基础预算 */}
@@ -286,20 +284,13 @@ const BudgetOverview: React.FC = () => {
               />
             </div>
 
-            {/* 上月结余 */}
+            {/* 上月结余（系统自动累计，只读） */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-slate-600 mb-2">上月结余</label>
-              <input
-                type="number"
-                value={editMode.lastMonthBalance}
-                onChange={(e) => setEditMode(prev => ({
-                  ...prev,
-                  lastMonthBalance: parseFloat(e.target.value) || 0
-                }))}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                placeholder="输入上月结余"
-              />
-              <p className="text-xs text-slate-400 mt-1">可输入负数表示上月超支</p>
+              <div className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700">
+                ¥{budget.lastMonthBalance.toFixed(2)}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">由系统自动累计，正数不叠加至总预算，负数会从基础预算中扣减</p>
             </div>
 
             {/* 按钮 */}

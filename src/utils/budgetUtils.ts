@@ -9,9 +9,19 @@ export const calculateMonthlySpent = (expenses: Expense[]): number => {
     .reduce((total, expense) => total + expense.amount, 0);
 };
 
+// 计算有效总预算：正数上月结余不叠加，仅负数扣减，上限为本月基础预算
+export const calculateEffectiveBudget = (budget: Pick<Budget, 'monthlyAmount' | 'lastMonthBalance'>): number => {
+  return budget.monthlyAmount + Math.min(0, budget.lastMonthBalance);
+};
+
+// 计算跨月后的累计上月结余：正数历史累加，负数仅滚动 remaining
+export const calculateNextLastMonthBalance = (budget: Pick<Budget, 'lastMonthBalance' | 'remaining'>): number => {
+  return Math.max(0, budget.lastMonthBalance) + budget.remaining;
+};
+
 // 计算剩余预算
 export const calculateRemainingBudget = (budget: Budget, spent: number): number => {
-  return budget.monthlyAmount + budget.lastMonthBalance - spent;
+  return calculateEffectiveBudget(budget) - spent;
 };
 
 // 计算日均剩余预算
@@ -28,12 +38,12 @@ export const shouldUpdateBudget = (currentMonth: string): boolean => {
 // 更新预算状态（跨月时）
 export const updateBudgetForNewMonth = (oldBudget: Budget, monthlyAmount: number): Budget => {
   const newMonth = getCurrentMonth();
-  const lastMonthBalance = oldBudget.remaining;
+  const lastMonthBalance = calculateNextLastMonthBalance(oldBudget);
   
   return {
     monthlyAmount,
     currentMonth: newMonth,
-    remaining: monthlyAmount + lastMonthBalance,
+    remaining: monthlyAmount + Math.min(0, lastMonthBalance),
     spent: 0,
     lastMonthBalance
   };
