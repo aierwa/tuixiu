@@ -63,7 +63,7 @@ const BudgetSetting: React.FC = () => {
         const spent = state.budget.spent;
         const remaining = calculateEffectiveBudget({
           monthlyAmount: amount,
-          lastMonthBalance: state.budget.lastMonthBalance
+          historicalBalance: state.budget.historicalBalance
         }) - spent;
 
         // 检查是否已有预算记录
@@ -98,12 +98,13 @@ const BudgetSetting: React.FC = () => {
               current_month: state.budget.currentMonth,
               remaining,
               spent,
-              last_month_balance: state.budget.lastMonthBalance
+              last_month_balance: state.budget.lastMonthBalance,
+              historical_balance: state.budget.historicalBalance
             });
         }
 
         // 更新本地状态
-        dispatch({ type: 'SET_BUDGET', payload: { monthlyAmount: amount, lastMonthBalance: state.budget.lastMonthBalance } });
+        dispatch({ type: 'SET_BUDGET', payload: { monthlyAmount: amount, lastMonthBalance: state.budget.lastMonthBalance, historicalBalance: state.budget.historicalBalance } });
         setIsEditing(false);
       } catch (error) {
         console.error('设置预算失败:', error);

@@ -9,14 +9,14 @@ export const calculateMonthlySpent = (expenses: Expense[]): number => {
     .reduce((total, expense) => total + expense.amount, 0);
 };
 
-// 计算有效总预算：正数上月结余不叠加，仅负数扣减，上限为本月基础预算
-export const calculateEffectiveBudget = (budget: Pick<Budget, 'monthlyAmount' | 'lastMonthBalance'>): number => {
-  return budget.monthlyAmount + Math.min(0, budget.lastMonthBalance);
+// 计算有效总预算：正历史结余不增加预算，负历史结余从基础预算中扣减
+export const calculateEffectiveBudget = (budget: Pick<Budget, 'monthlyAmount' | 'historicalBalance'>): number => {
+  return budget.monthlyAmount + Math.min(0, budget.historicalBalance);
 };
 
-// 计算跨月后的累计上月结余：正数历史累加，负数仅滚动 remaining
-export const calculateNextLastMonthBalance = (budget: Pick<Budget, 'lastMonthBalance' | 'remaining'>): number => {
-  return Math.max(0, budget.lastMonthBalance) + budget.remaining;
+// 计算跨月后的历史结余：累计上月历史结余与上月最终剩余预算
+export const calculateNextHistoricalBalance = (budget: Pick<Budget, 'historicalBalance' | 'remaining'>): number => {
+  return budget.historicalBalance + budget.remaining;
 };
 
 // 计算剩余预算
@@ -38,14 +38,16 @@ export const shouldUpdateBudget = (currentMonth: string): boolean => {
 // 更新预算状态（跨月时）
 export const updateBudgetForNewMonth = (oldBudget: Budget, monthlyAmount: number): Budget => {
   const newMonth = getCurrentMonth();
-  const lastMonthBalance = calculateNextLastMonthBalance(oldBudget);
+  const lastMonthBalance = oldBudget.remaining;
+  const historicalBalance = calculateNextHistoricalBalance(oldBudget);
   
   return {
     monthlyAmount,
     currentMonth: newMonth,
-    remaining: monthlyAmount + Math.min(0, lastMonthBalance),
+    remaining: monthlyAmount + Math.min(0, historicalBalance),
     spent: 0,
-    lastMonthBalance
+    lastMonthBalance,
+    historicalBalance
   };
 };
 
@@ -68,6 +70,7 @@ export const generateInitialBudget = (defaultMonthlyBudget: number = 8000): Budg
     currentMonth: getCurrentMonth(),
     remaining: defaultMonthlyBudget,
     spent: 0,
-    lastMonthBalance: 0
+    lastMonthBalance: 0,
+    historicalBalance: 0
   };
 };

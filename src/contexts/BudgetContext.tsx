@@ -5,7 +5,7 @@ import { getStoredBookkeeper } from '../utils/bookkeeperStorage';
 import { 
   calculateMonthlySpent, 
   calculateEffectiveBudget,
-  calculateNextLastMonthBalance,
+  calculateNextHistoricalBalance,
   updateBudgetForNewMonth, 
   shouldUpdateBudget
 } from '../utils/budgetUtils';
@@ -17,7 +17,8 @@ const initialState: AppState = {
     currentMonth: '',
     remaining: 0,
     spent: 0,
-    lastMonthBalance: 0
+    lastMonthBalance: 0,
+    historicalBalance: 0
   },
   expenses: [],
   tags: [],
@@ -35,10 +36,11 @@ const budgetReducer = (state: AppState, action: Action): AppState => {
           ...state.budget,
           monthlyAmount: action.payload.monthlyAmount,
           lastMonthBalance: action.payload.lastMonthBalance,
+          historicalBalance: action.payload.historicalBalance,
           currentMonth: new Date().toISOString().slice(0, 7), // 格式：YYYY-MM
           remaining: calculateEffectiveBudget({
             monthlyAmount: action.payload.monthlyAmount,
-            lastMonthBalance: action.payload.lastMonthBalance
+            historicalBalance: action.payload.historicalBalance
           }) - state.budget.spent
         }
       };
@@ -186,6 +188,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .update({
             monthly_amount: budget.monthlyAmount,
             last_month_balance: budget.lastMonthBalance,
+            historical_balance: budget.historicalBalance,
             remaining: budget.remaining,
             spent: budget.spent
           })
@@ -198,6 +201,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             ledger_id: ledgerId,
             monthly_amount: budget.monthlyAmount,
             last_month_balance: budget.lastMonthBalance,
+            historical_balance: budget.historicalBalance,
             current_month: currentMonth,
             remaining: budget.remaining,
             spent: budget.spent
@@ -232,7 +236,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           type: 'SET_BUDGET',
           payload: {
             monthlyAmount: budget.monthly_amount,
-            lastMonthBalance: budget.last_month_balance
+            lastMonthBalance: budget.last_month_balance,
+            historicalBalance: budget.historical_balance || 0
           }
         });
       } else if (ledger && !budgetError) {
@@ -245,15 +250,16 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         
         const { data: lastMonthBudgets } = await supabase
           .from('budgets')
-          .select('remaining, last_month_balance')
+          .select('remaining, last_month_balance, historical_balance')
           .eq('ledger_id', ledgerId)
           .eq('current_month', lastMonthStr)
           .single();
         
         // 累计上月结余：正数历史累加，负数仅滚动 remaining
-        const lastMonthBalance = lastMonthBudgets
-          ? calculateNextLastMonthBalance({
-              lastMonthBalance: lastMonthBudgets.last_month_balance || 0,
+        const lastMonthBalance = lastMonthBudgets?.remaining || 0;
+        const historicalBalance = lastMonthBudgets
+          ? calculateNextHistoricalBalance({
+              historicalBalance: lastMonthBudgets.historical_balance || 0,
               remaining: lastMonthBudgets.remaining || 0
             })
           : 0;
@@ -264,9 +270,10 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           ledger_id: ledgerId,
           monthly_amount: ledger.default_monthly_budget,
           current_month: currentMonth,
-          remaining: ledger.default_monthly_budget + Math.min(0, lastMonthBalance),
+          remaining: ledger.default_monthly_budget + Math.min(0, historicalBalance),
           spent: 0,
-          last_month_balance: lastMonthBalance
+          last_month_balance: lastMonthBalance,
+          historical_balance: historicalBalance
         };
 
         // 保存到数据库
@@ -281,7 +288,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             type: 'SET_BUDGET',
             payload: {
               monthlyAmount: createdBudget.monthly_amount,
-              lastMonthBalance: createdBudget.last_month_balance
+              lastMonthBalance: createdBudget.last_month_balance,
+              historicalBalance: createdBudget.historical_balance || 0
             }
           });
         } else {
@@ -296,14 +304,15 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           
           const { data: lastMonthBudgets } = await supabase
             .from('budgets')
-            .select('remaining, last_month_balance')
+            .select('remaining, last_month_balance, historical_balance')
             .eq('ledger_id', ledgerId)
             .eq('current_month', lastMonthStr)
             .single();
           
-          const lastMonthBalance = lastMonthBudgets
-            ? calculateNextLastMonthBalance({
-                lastMonthBalance: lastMonthBudgets.last_month_balance || 0,
+          const lastMonthBalance = lastMonthBudgets?.remaining || 0;
+          const historicalBalance = lastMonthBudgets
+            ? calculateNextHistoricalBalance({
+                historicalBalance: lastMonthBudgets.historical_balance || 0,
                 remaining: lastMonthBudgets.remaining || 0
               })
             : 0;
@@ -312,7 +321,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             type: 'SET_BUDGET',
             payload: {
               monthlyAmount: ledger.default_monthly_budget,
-              lastMonthBalance: lastMonthBalance
+              lastMonthBalance: lastMonthBalance,
+              historicalBalance: historicalBalance
             }
           });
         }

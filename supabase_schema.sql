@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   remaining NUMERIC(10, 2) NOT NULL DEFAULT 0,
   spent NUMERIC(10, 2) NOT NULL DEFAULT 0,
   last_month_balance NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  historical_balance NUMERIC(10, 2) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -98,3 +99,7 @@ CREATE POLICY "Allow all access to bookkeepers" ON bookkeepers
 
 ALTER TABLE expenses
   ADD COLUMN IF NOT EXISTS outside_budget BOOLEAN NOT NULL DEFAULT false;
+
+-- 历史结余：累计每个已结束月份的上月结余
+ALTER TABLE budgets
+  ADD COLUMN IF NOT EXISTS historical_balance NUMERIC(10, 2) NOT NULL DEFAULT 0;

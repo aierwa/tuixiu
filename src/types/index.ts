@@ -7,6 +7,7 @@ export interface Budget {
   remaining: number;               // 剩余预算
   spent: number;                   // 已支出金额
   lastMonthBalance: number;        // 上月结余
+  historicalBalance: number;       // 历史结余
 }
 
 // 支出记录接口
@@ -59,7 +60,7 @@ export interface AppState {
 
 // 动作类型
 export type Action =
-  | { type: 'SET_BUDGET'; payload: { monthlyAmount: number; lastMonthBalance: number } }
+  | { type: 'SET_BUDGET'; payload: { monthlyAmount: number; lastMonthBalance: number; historicalBalance: number } }
   | { type: 'ADD_EXPENSE'; payload: Omit<Expense, 'id'> }
   | { type: 'DELETE_EXPENSE'; payload: string }
   | { type: 'CLEAR_EXPENSES' }

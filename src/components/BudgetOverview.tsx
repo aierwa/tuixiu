@@ -144,7 +144,8 @@ const BudgetOverview: React.FC = () => {
       type: 'SET_BUDGET',
       payload: {
         monthlyAmount: parseFloat(editMode.monthlyAmount.toString()) || 0,
-        lastMonthBalance: budget.lastMonthBalance
+        lastMonthBalance: budget.lastMonthBalance,
+        historicalBalance: budget.historicalBalance
       }
     });
     setShowDetailModal(false);
@@ -266,7 +267,7 @@ const BudgetOverview: React.FC = () => {
                   ¥{totalBudget.toFixed(2)}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">由基础预算与上月结余计算（正数不叠加，上限为本月基础预算）</p>
+              <p className="text-xs text-slate-400">由基础预算与负历史结余计算，正历史结余不增加本月预算</p>
             </div>
 
             {/* 本月基础预算 */}
@@ -290,7 +291,16 @@ const BudgetOverview: React.FC = () => {
               <div className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700">
                 ¥{budget.lastMonthBalance.toFixed(2)}
               </div>
-              <p className="text-xs text-slate-400 mt-1">由系统自动累计，正数不叠加至总预算，负数会从基础预算中扣减</p>
+              <p className="text-xs text-slate-400 mt-1">最近一个月结束时的剩余预算</p>
+            </div>
+
+            {/* 历史结余（系统自动累计，只读） */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-600 mb-2">历史结余</label>
+              <div className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700">
+                ¥{budget.historicalBalance.toFixed(2)}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">正数不增加本月总预算，负数会从基础预算中扣减</p>
             </div>
 
             {/* 按钮 */}
