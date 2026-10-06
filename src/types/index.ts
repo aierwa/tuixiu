@@ -60,7 +60,8 @@ export interface AppState {
 
 // 动作类型
 export type Action =
-  | { type: 'SET_BUDGET'; payload: { monthlyAmount: number; lastMonthBalance: number; historicalBalance: number } }
+  | { type: 'SET_BUDGET'; payload: { monthlyAmount: number; lastMonthBalance: number; historicalBalance: number; currentMonth?: string; spent?: number; remaining?: number } }
+  | { type: 'SET_EXPENSES'; payload: Expense[] } // 批量加载支出并一次性重算当月预算
   | { type: 'ADD_EXPENSE'; payload: Omit<Expense, 'id'> }
   | { type: 'DELETE_EXPENSE'; payload: string }
   | { type: 'CLEAR_EXPENSES' }

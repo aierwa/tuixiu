@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useReducer, useEffect, useState, useCallback, useRef } from 'react';
-import { AppState, Action, Expense, Tag } from '../types';
+import { AppState, Action, Budget, Expense, Tag } from '../types';
 import { supabase } from '../lib/supabase';
 import { getStoredBookkeeper } from '../utils/bookkeeperStorage';
+import { formatMonth, getCurrentMonth } from '../utils/dateUtils';
 import { 
   calculateMonthlySpent, 
   calculateEffectiveBudget,
+  calculateRemainingBudget,
   calculateNextHistoricalBalance,
   updateBudgetForNewMonth, 
   shouldUpdateBudget
@@ -29,21 +31,39 @@ const initialState: AppState = {
 // Reducer 函数
 const budgetReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
-    case 'SET_BUDGET':
+    case 'SET_BUDGET': {
+      const nextBudget: Budget = {
+        ...state.budget,
+        monthlyAmount: action.payload.monthlyAmount,
+        lastMonthBalance: action.payload.lastMonthBalance,
+        historicalBalance: action.payload.historicalBalance,
+        currentMonth: action.payload.currentMonth ?? getCurrentMonth(),
+        spent: action.payload.spent ?? state.budget.spent,
+        remaining: 0
+      };
+
       return {
         ...state,
         budget: {
-          ...state.budget,
-          monthlyAmount: action.payload.monthlyAmount,
-          lastMonthBalance: action.payload.lastMonthBalance,
-          historicalBalance: action.payload.historicalBalance,
-          currentMonth: new Date().toISOString().slice(0, 7), // 格式：YYYY-MM
-          remaining: calculateEffectiveBudget({
-            monthlyAmount: action.payload.monthlyAmount,
-            historicalBalance: action.payload.historicalBalance
-          }) - state.budget.spent
+          ...nextBudget,
+          // 从数据库加载时保留已核算的 remaining；手动修改预算时重新计算。
+          remaining: action.payload.remaining ?? calculateRemainingBudget(nextBudget, nextBudget.spent)
         }
       };
+    }
+
+    case 'SET_EXPENSES': {
+      const spent = calculateMonthlySpent(action.payload);
+      return {
+        ...state,
+        expenses: action.payload,
+        budget: {
+          ...state.budget,
+          spent,
+          remaining: calculateRemainingBudget(state.budget, spent)
+        }
+      };
+    }
     
     case 'ADD_EXPENSE':
       const newExpense: Expense = action.payload as Expense;
@@ -164,9 +184,9 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [state, dispatch] = useReducer(budgetReducer, initialState);
   
   // 同步预算到Supabase
-  const syncBudgetToSupabase = useCallback(async (budget: any, ledgerId: string) => {
+  const syncBudgetToSupabase = useCallback(async (budget: Budget, ledgerId: string) => {
     try {
-      const currentMonth = new Date().toISOString().slice(0, 7); // 格式：YYYY-MM
+      const currentMonth = budget.currentMonth || getCurrentMonth(); // 格式：YYYY-MM
       
       // 检查是否存在当月预算记录
       const { data: budgets, error: checkError } = await supabase
@@ -218,7 +238,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setLoading(true);
     try {
       // 获取当前月份
-      const currentMonth = new Date().toISOString().slice(0, 7); // 格式：YYYY-MM
+      const currentMonth = getCurrentMonth(); // 格式：YYYY-MM
 
       // 加载当月预算
       const { data: budgets, error: budgetError } = await supabase
@@ -237,7 +257,10 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           payload: {
             monthlyAmount: budget.monthly_amount,
             lastMonthBalance: budget.last_month_balance,
-            historicalBalance: budget.historical_balance || 0
+            historicalBalance: budget.historical_balance ?? 0,
+            currentMonth: budget.current_month,
+            spent: budget.spent ?? 0,
+            remaining: budget.remaining ?? undefined
           }
         });
       } else if (ledger && !budgetError) {
@@ -246,31 +269,32 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // 查询上个月的预算记录，获取结余
         const lastMonth = new Date();
         lastMonth.setMonth(lastMonth.getMonth() - 1);
-        const lastMonthStr = lastMonth.toISOString().slice(0, 7); // 格式：YYYY-MM
+        const lastMonthStr = formatMonth(lastMonth); // 格式：YYYY-MM
         
         const { data: lastMonthBudgets } = await supabase
           .from('budgets')
-          .select('remaining, last_month_balance, historical_balance')
+          .select('monthly_amount, remaining, last_month_balance, historical_balance')
           .eq('ledger_id', ledgerId)
           .eq('current_month', lastMonthStr)
           .single();
         
         // 累计上月结余：正数历史累加，负数仅滚动 remaining
-        const lastMonthBalance = lastMonthBudgets?.remaining || 0;
+        const lastMonthBalance = lastMonthBudgets?.remaining ?? 0;
         const historicalBalance = lastMonthBudgets
           ? calculateNextHistoricalBalance({
-              historicalBalance: lastMonthBudgets.historical_balance || 0,
-              remaining: lastMonthBudgets.remaining || 0
+              historicalBalance: lastMonthBudgets.historical_balance ?? 0,
+              remaining: lastMonthBudgets.remaining ?? 0
             })
           : 0;
         console.log('Last month balance:', lastMonthBalance, 'for month:', lastMonthStr);
         
         // 如果没有当月预算记录，创建新的预算记录
+        const monthlyAmount = lastMonthBudgets?.monthly_amount ?? ledger.default_monthly_budget;
         const newBudget = {
           ledger_id: ledgerId,
-          monthly_amount: ledger.default_monthly_budget,
+          monthly_amount: monthlyAmount,
           current_month: currentMonth,
-          remaining: ledger.default_monthly_budget + Math.min(0, historicalBalance),
+          remaining: monthlyAmount + Math.min(0, historicalBalance),
           spent: 0,
           last_month_balance: lastMonthBalance,
           historical_balance: historicalBalance
@@ -289,7 +313,10 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             payload: {
               monthlyAmount: createdBudget.monthly_amount,
               lastMonthBalance: createdBudget.last_month_balance,
-              historicalBalance: createdBudget.historical_balance || 0
+              historicalBalance: createdBudget.historical_balance ?? 0,
+              currentMonth: createdBudget.current_month,
+              spent: createdBudget.spent ?? 0,
+              remaining: createdBudget.remaining ?? undefined
             }
           });
         } else {
@@ -300,53 +327,52 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // 重新查询上月结余（如果前面查询失败）
           const lastMonth = new Date();
           lastMonth.setMonth(lastMonth.getMonth() - 1);
-          const lastMonthStr = lastMonth.toISOString().slice(0, 7);
+          const lastMonthStr = formatMonth(lastMonth);
           
           const { data: lastMonthBudgets } = await supabase
             .from('budgets')
-            .select('remaining, last_month_balance, historical_balance')
+            .select('monthly_amount, remaining, last_month_balance, historical_balance')
             .eq('ledger_id', ledgerId)
             .eq('current_month', lastMonthStr)
             .single();
           
-          const lastMonthBalance = lastMonthBudgets?.remaining || 0;
+          const lastMonthBalance = lastMonthBudgets?.remaining ?? 0;
           const historicalBalance = lastMonthBudgets
             ? calculateNextHistoricalBalance({
-                historicalBalance: lastMonthBudgets.historical_balance || 0,
-                remaining: lastMonthBudgets.remaining || 0
+                historicalBalance: lastMonthBudgets.historical_balance ?? 0,
+                remaining: lastMonthBudgets.remaining ?? 0
               })
             : 0;
           
+          const monthlyAmount = lastMonthBudgets?.monthly_amount ?? ledger.default_monthly_budget;
           dispatch({
             type: 'SET_BUDGET',
             payload: {
-              monthlyAmount: ledger.default_monthly_budget,
-              lastMonthBalance: lastMonthBalance,
-              historicalBalance: historicalBalance
+              monthlyAmount,
+              lastMonthBalance,
+              historicalBalance,
+              currentMonth,
+              spent: 0,
+              remaining: monthlyAmount + Math.min(0, historicalBalance)
             }
           });
         }
       }
 
-      // 清空现有支出数据
-      dispatch({ type: 'CLEAR_EXPENSES' });
-
-      // 加载支出（关联记账人名称便于展示）
+      // 加载支出（关联记账人名称便于展示）。一次性提交，避免逐条 dispatch 触发中间预算状态同步。
       const { data: expenses, error: expensesError } = await supabase
         .from('expenses')
         .select('*, bookkeeper:bookkeepers(name)')
         .eq('ledger_id', ledgerId);
 
       if (!expensesError && expenses) {
-        expenses.forEach((raw: Record<string, unknown>) => {
+        const normalizedExpenses = expenses.map((raw: Record<string, unknown>) => {
           const nested = raw.bookkeeper as { name?: string } | null | undefined;
           const bookkeeper_name = nested?.name ?? null;
           const { bookkeeper: _bk, ...rest } = raw;
-          dispatch({
-            type: 'ADD_EXPENSE',
-            payload: { ...rest, bookkeeper_name } as Expense
-          });
+          return { ...rest, bookkeeper_name } as Expense;
         });
+        dispatch({ type: 'SET_EXPENSES', payload: normalizedExpenses });
       }
 
       // 清空现有标签数据
@@ -418,10 +444,10 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   
   // 监听预算变化，同步到Supabase
   useEffect(() => {
-    if (state.isAuthenticated && state.ledger && state.budget.monthlyAmount > 0) {
+    if (!loading && state.isAuthenticated && state.ledger && state.budget.monthlyAmount > 0) {
       syncBudgetToSupabase(state.budget, state.ledger.id);
     }
-  }, [state.budget, state.ledger, state.isAuthenticated, syncBudgetToSupabase]);
+  }, [loading, state.budget, state.ledger, state.isAuthenticated, syncBudgetToSupabase]);
 
   // 应用启动时检查认证状态
   // 注意：checkAuth 现在在 AppWithAuth 组件中调用，这里不再重复调用
