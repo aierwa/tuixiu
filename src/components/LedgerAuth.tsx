@@ -15,6 +15,12 @@ const LedgerAuth: React.FC<LedgerAuthProps> = ({ onSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    // 只忽略名称前后空白，不改变大小写、内部字符或密码。
+    const normalizedLedgerName = ledgerName.trim();
+    if (!normalizedLedgerName) {
+      setError('请输入账本名称');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -22,17 +28,21 @@ const LedgerAuth: React.FC<LedgerAuthProps> = ({ onSuccess }) => {
       const { data: ledgerWithHash, error: fetchError } = await supabase
         .from('ledgers')
         .select('*')
-        .eq('name', ledgerName)
-        .single();
+        .eq('name', normalizedLedgerName)
+        .maybeSingle();
 
-      if (fetchError) {
-        throw new Error('账本不存在');
+      // 查询失败不代表账本不存在；只有成功返回空结果才提示名称有误。
+      if (fetchError) throw fetchError;
+      if (!ledgerWithHash) {
+        setError('账本不存在，请检查名称及大小写');
+        return;
       }
 
       // 验证密码
       const isPasswordValid = await bcrypt.compare(password, ledgerWithHash.password_hash);
       if (!isPasswordValid) {
-        throw new Error('密码错误');
+        setError('密码错误');
+        return;
       }
 
       // 创建不包含密码哈希的账本对象
@@ -47,8 +57,8 @@ const LedgerAuth: React.FC<LedgerAuthProps> = ({ onSuccess }) => {
       localStorage.setItem('budget-app-auth', JSON.stringify(authData));
 
       onSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '验证失败');
+    } catch {
+      setError('暂时无法完成登录验证，请检查网络后重试；若持续失败，请联系维护者。');
     } finally {
       setLoading(false);
     }
@@ -74,6 +84,10 @@ const LedgerAuth: React.FC<LedgerAuthProps> = ({ onSuccess }) => {
             <input
               type="text"
               id="ledgerName"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              autoComplete="username"
               value={ledgerName}
               onChange={(e) => setLedgerName(e.target.value)}
               required
@@ -89,6 +103,7 @@ const LedgerAuth: React.FC<LedgerAuthProps> = ({ onSuccess }) => {
             <input
               type="password"
               id="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
