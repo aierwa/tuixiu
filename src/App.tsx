@@ -726,7 +726,7 @@ function App() {
 }
 
 function AppWithAuth() {
-  const { state, checkAuth, dispatch } = useBudget();
+  const { state, checkAuth, dispatch, authError } = useBudget();
   const [loading, setLoading] = useState(true);
   const initialized = useRef(false);
 
@@ -767,6 +767,25 @@ function AppWithAuth() {
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
           <p className="mt-4 text-gray-600">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 连接失败不是登录失效：展示重试入口，避免要求用户重复输入账本密码。
+  if (authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white rounded-lg shadow-md p-8 max-w-md w-full text-center">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">连接暂时失败</h2>
+          <p role="alert" className="text-gray-600 mb-6">{authError}</p>
+          <button
+            type="button"
+            onClick={handleAuthSuccess}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md"
+          >
+            重新连接
+          </button>
         </div>
       </div>
     );

@@ -169,6 +169,7 @@ interface BudgetContextType {
   state: AppState;
   dispatch: React.Dispatch<Action>;
   loading: boolean;
+  authError: string | null; // 连接失败与登录失效分开处理，支持保留登录信息后重试
   checkAuth: () => Promise<boolean>;
   loadData: (ledgerId: string, ledger: any) => Promise<void>;
 }
@@ -178,6 +179,7 @@ const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 // Provider 组件
 export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const initialized = useRef(false);
   
   // 使用 useReducer 管理状态，直接使用初始状态
@@ -401,16 +403,27 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // 检查认证状态
   const checkAuth = useCallback(async (): Promise<boolean> => {
+    setAuthError(null);
     try {
       const authDataStr = localStorage.getItem('budget-app-auth');
       if (!authDataStr) {
         return false;
       }
 
-      const authData = JSON.parse(authDataStr);
-      const expiresAt = new Date(authData.expiresAt);
-      
-      if (expiresAt < new Date()) {
+      let authData;
+      try {
+        authData = JSON.parse(authDataStr);
+      } catch {
+        // 仅损坏、过期或确认失效的登录信息才删除，网络错误不能视为退出登录。
+        localStorage.removeItem('budget-app-auth');
+        return false;
+      }
+      const expiresAt = typeof authData?.expiresAt === 'string'
+        ? Date.parse(authData.expiresAt)
+        : NaN;
+
+      if (typeof authData?.ledgerId !== 'string' || !authData.ledgerId ||
+          !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
         localStorage.removeItem('budget-app-auth');
         return false;
       }
@@ -420,9 +433,11 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         .from('ledgers')
         .select('id, name, default_monthly_budget, created_at')
         .eq('id', authData.ledgerId)
-        .single();
+        .maybeSingle();
 
-      if (error || !ledger) {
+      // 查询错误（包括断网、超时、服务异常）保留凭据；成功查询无记录才判定账本失效。
+      if (error) throw error;
+      if (!ledger) {
         localStorage.removeItem('budget-app-auth');
         return false;
       }
@@ -437,7 +452,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return true;
     } catch (error) {
       console.error('Auth check failed:', error);
-      localStorage.removeItem('budget-app-auth');
+      setAuthError('暂时无法恢复登录，请检查网络后重试。已保存的登录信息不会因此被清除。');
       return false;
     }
   }, [loadData]);
@@ -458,7 +473,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
   
   return (
-    <BudgetContext.Provider value={{ state, dispatch, loading, checkAuth, loadData }}>
+    <BudgetContext.Provider value={{ state, dispatch, loading, authError, checkAuth, loadData }}>
       {children}
     </BudgetContext.Provider>
   );
